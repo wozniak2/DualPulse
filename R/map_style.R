@@ -1,6 +1,6 @@
 ## Shared cartographic style for the maps of the paper (sourced by the figure scripts).
 ## One basemap (city land, the Warta and lakes, white osiedle boundaries), one palette, reference labels for
-## a few districts (white halo), a 2-km scale bar and a north arrow, and one theme with lowercase panel tags.
+## a few districts (white halo), a 2-km scale bar, and one theme with lowercase panel tags. North is up on every map.
 ## Colours: least deprived #2a78d6 (blue), most deprived #e34948 (red), neutral #d9d7d0; the diverging
 ## deprivation scale runs between them through a light neutral.
 
@@ -38,17 +38,12 @@ ms_labels <- function(L, which = NULL, size = 2.5) {
                            min.segment.length = Inf, force = 0.3, seed = 7, box.padding = 0.05, inherit.aes = FALSE)
 }
 ms_centre <- function(L) geom_point(data = L$centre, aes(X, Y), shape = 3, size = 2.2, stroke = 0.7, colour = MSTY$ink, inherit.aes = FALSE)
-## 2-km scale bar (0-1-2 km, alternating) and a north arrow, in the bottom-left and top-right corners
+## 2-km scale bar (0-1-2 km, alternating) in the bottom-left corner
 ms_scalebar <- function(L, km = 2, pos = c(0.05, 0.06), h = 0.010) {
   b <- L$bbox; x0 <- b[["xmin"]] + pos[1] * (b[["xmax"]] - b[["xmin"]]); y0 <- b[["ymin"]] + pos[2] * (b[["ymax"]] - b[["ymin"]]); hh <- h * (b[["ymax"]] - b[["ymin"]])
   seg <- data.table(x1 = x0 + c(0, 500 * km), x2 = x0 + c(500 * km, 1000 * km), f = c(MSTY$ink, "#ffffff"))
   list(annotate("rect", xmin = seg$x1, xmax = seg$x2, ymin = y0, ymax = y0 + hh, fill = seg$f, colour = MSTY$ink, linewidth = 0.25),
        annotate("text", x = x0 + c(0, 500 * km, 1000 * km), y = y0 + 2.6 * hh, label = c("0", km / 2, paste(km, "km")), size = 2.3, colour = MSTY$ink, vjust = 0))
-}
-ms_north <- function(L, pos = c(0.94, 0.92)) {
-  b <- L$bbox; x <- b[["xmin"]] + pos[1] * (b[["xmax"]] - b[["xmin"]]); y <- b[["ymin"]] + pos[2] * (b[["ymax"]] - b[["ymin"]]); d <- 0.022 * (b[["ymax"]] - b[["ymin"]])
-  list(annotate("segment", x = x, xend = x, y = y - d, yend = y + d, arrow = arrow(length = unit(1.6, "mm"), type = "closed"), linewidth = 0.4, colour = MSTY$ink),
-       annotate("text", x = x, y = y + 1.5 * d, label = "N", size = 2.6, fontface = "bold", colour = MSTY$ink))
 }
 ms_coord <- function(L, pad = 300) coord_sf(datum = NA, expand = FALSE, xlim = c(L$bbox[["xmin"]] - pad, L$bbox[["xmax"]] + pad), ylim = c(L$bbox[["ymin"]] - pad, L$bbox[["ymax"]] + pad))
 ## theme: void map, plain panel titles, legends at the bottom, bold lowercase tags (patchwork tag_levels = "a")

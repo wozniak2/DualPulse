@@ -1,14 +1,14 @@
 ## DualPulse | stage 9: Main-text figures and graphical abstract
 ##
-## Figures 2-5, 8 and 9 of the main text and the graphical abstract (Figure 1 is drawn in LaTeX; Figures 6 and 7 by sections 75 and 74 of stage 8).
+## Figures 2-5 and 10 of the main text, the route networks of supplementary S7 and the graphical abstract (Figure 1 is drawn in LaTeX; Figures 6 and 7 by sections 75 and 74 of stage 8, Figures 8 and 9 by section 81).
 ## Supplementary figures are drawn by the sections that compute them.
 ##
 ## Sections (named by the numbered scripts they replace, as in the project notes):
 ##   57      Figure 2: how deprivation is assigned to stop catchments
 ##   60      Figure 3: where the more and less deprived areas lie
-##   64      Figure 9: the gaps and their parts
+##   64      Figure 10: the gaps and their parts
 ##   71      Figure 5: deprivation of destinations
-##   70      Figure 8: route networks
+##   70      Route networks of each third (supplementary S7)
 ##   69      Figure 4: what the timetable offers
 ##   72      Graphical abstract
 ##
@@ -23,6 +23,13 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   ## (manuscript §2.2c-d, §2.4-2.5). Reproduces the objects of scripts 20, 34 and
   ## 39; nothing is re-estimated.
   ##
+  ## Main version (Figure 2), six panels: (a) the deprivation score by osiedle; in one
+  ##   window, around Niezłomnych, where Jeżyce, Stare Miasto, Św. Łazarz and Wilda meet:
+  ##   (b) the walking catchments on the pedestrian network, (c) residents coloured by
+  ##   their osiedle's score, (d) catchment deprivation, the residents' mean; (e) catchment
+  ##   deprivation of every stop; (f) the municipal share of catchment residents in the
+  ##   same window.
+  ## Full version (supplementary Figure S1), twelve panels:
   ## Row 1, deprivation by osiedle: (a) registered unemployment and (b) social-
   ##   assistance poverty, each the city's standardised score averaged over the
   ##   2019 and 2021 monitoring rounds and signed so that higher values denote
@@ -36,7 +43,8 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   ## Row 3, combination: (g) residents in the window, coloured by the score of
   ##   their osiedle; (h) catchment deprivation, the population-weighted mean of
   ##   those scores; (i) catchment deprivation of every stop complex.
-  ## Output: output/figures/Fig_construction.png (copied to manuscript/figures)
+  ## Row 4, municipal housing in the square holding the most municipal residents.
+  ## Output: output/figures/Fig_construction.png, Fig_construction_full.png (copied to manuscript/figures)
 
   suppressPackageStartupMessages({library(data.table); library(sf); library(ggplot2); library(patchwork)})
   out_dir <- ROOT
@@ -76,23 +84,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   poles <- st_transform(st_as_sf(st, coords = c("stop_lon", "stop_lat"), crs = 4326), 2180)
   poles <- poles[poles$stop_name %in% C$stop_name & lengths(st_intersects(poles, city)) > 0, ]
 
-  ## ── window over Winogrady and the pedestrian network in it ──────────────
-  ctr <- st_centroid(st_geometry(C[C$stop_name == "Os. Kosmonautów", ]))
-  win <- st_as_sfc(st_bbox(st_buffer(ctr, 900)))
-  clip <- function(x) suppressWarnings(st_intersection(x, win))
-  w0 <- readRDS(file.path(out_dir, "data/raw/osm/poznan_walk_ways.rds"))
-  for (k in c("foot", "access")) if (!k %in% names(w0)) w0[[k]] <- NA_character_
-  w0 <- w0[!(w0$foot %in% "no") & !(w0$access %in% c("no", "private") & !(w0$foot %in% c("yes", "designated", "permissive"))), ]
-  ways <- clip(st_geometry(st_transform(w0, 2180))[lengths(st_intersects(st_transform(w0, 2180), win)) > 0])
-  osi_w <- clip(st_line_merge(st_union(st_cast(st_geometry(osi), "MULTILINESTRING"))))   # shared edges once, so dashes stay dashed
-  vc_w <- clip(vc); poles_w <- poles[lengths(st_intersects(poles, win)) > 0, ]; pp_w <- pp[lengths(st_intersects(pp, win)) > 0, ]
-  lab_w <- suppressWarnings(st_point_on_surface(vc_w[!is.na(vc_w$cdep) & as.numeric(st_area(vc_w)) > 4e4, ]))
-  os_lab <- suppressWarnings(st_point_on_surface(clip(osi)))
-  os_lab <- os_lab[as.numeric(st_area(clip(osi)))[match(os_lab$name, clip(osi)$name)] > 1.5e5, ]
-  cat(sprintf("Window: %d catchments (%d with residents), %d poles, %d addresses, %d residents, osiedla: %s\n", nrow(vc_w), sum(!is.na(vc_w$cdep)),
-              nrow(poles_w), nrow(pp_w), sum(pp_w$pop), paste(sprintf("%s %.2f", os_lab$name, os_lab$dep), collapse = "; ")))
-
-  ## ── municipal housing (as in script 37) and an inner-city window ────────
+  ## ── municipal housing (as in script 37) ─────────────────────────────────
   ap_crs <- st_crs(st_read(file.path(out_dir, "output/geopoz_address_points.gpkg"), quiet = TRUE))
   mb <- fread(file.path(s2, "municipal_buildings.csv"), encoding = "UTF-8")[pop > 0]
   mb <- st_transform(st_as_sf(mb, coords = c("x", "y"), crs = ap_crs), 2180)
@@ -101,106 +93,111 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   vc <- merge(vc, mc[, .(stop_name, muni_share)], by = "stop_name", all.x = TRUE)
   cat(sprintf("Municipal buildings with residents: %d; residents: %d; catchments with any: %d of %d; Spearman with catchment deprivation: %.2f\n",
               nrow(mb), sum(mb$pop), sum(mc$muni_share > 0), nrow(mc), cor(vc$muni_share, vc$cdep, method = "spearman", use = "complete.obs")))
-  ## window: the 1.8 km square, centred on a stop complex, holding the most municipal residents
+
+  ## ── windows: 1.8 km squares centred on a stop complex, and what lies in them ──
+  w0 <- readRDS(file.path(out_dir, "data/raw/osm/poznan_walk_ways.rds"))
+  for (k in c("foot", "access")) if (!k %in% names(w0)) w0[[k]] <- NA_character_
+  w0 <- w0[!(w0$foot %in% "no") & !(w0$access %in% c("no", "private") & !(w0$foot %in% c("yes", "designated", "permissive"))), ]
+  w0 <- st_geometry(st_transform(w0, 2180))
+  osi_lines <- st_line_merge(st_union(st_cast(st_geometry(osi), "MULTILINESTRING")))   # shared edges once, so dashes stay dashed
+  window <- function(centre, lab_min = 1.5e5) {
+    win <- st_as_sfc(st_bbox(st_buffer(st_centroid(st_geometry(C[C$stop_name == centre, ])), 900)))
+    clip <- function(x) suppressWarnings(st_intersection(x, win))
+    vw <- clip(vc); o <- clip(osi)
+    ol <- suppressWarnings(st_point_on_surface(o)); ol <- ol[as.numeric(st_area(o))[match(ol$name, o$name)] > lab_min, ]
+    W <- list(win = win, b = st_bbox(win), line = st_cast(st_geometry(win), "LINESTRING"), ways = clip(w0[lengths(st_intersects(w0, win)) > 0]),
+              osi = clip(osi_lines), vc = vw, poles = poles[lengths(st_intersects(poles, win)) > 0, ], pp = pp[lengths(st_intersects(pp, win)) > 0, ],
+              lab = suppressWarnings(st_point_on_surface(vw[!is.na(vw$cdep) & as.numeric(st_area(vw)) > 4e4, ])), os_lab = ol,
+              mb = mb[lengths(st_intersects(mb, win)) > 0, ])
+    cat(sprintf("Window around %s: %d catchments (%d with residents), %d poles, %d residents, %d municipal buildings with %d residents; osiedla: %s\n",
+                centre, nrow(vw), sum(!is.na(vw$cdep)), nrow(W$poles), sum(W$pp$pop), nrow(W$mb), sum(W$mb$pop),
+                paste(sprintf("%s %.2f", ol$name, ol$dep), collapse = "; ")))
+    W
+  }
+  ## full version: Winogrady (W1) and the square holding the most municipal residents (W2); main version: one window (W3)
   cc <- data.table(stop_name = C$stop_name, st_coordinates(st_centroid(st_geometry(C))))
   mxy <- data.table(st_coordinates(mb), pop = mb$pop)
   cc[, mres := sapply(seq_len(.N), function(i) mxy[abs(X - cc$X[i]) <= 900 & abs(Y - cc$Y[i]) <= 900, sum(pop)])]
-  ctr2 <- st_centroid(st_geometry(C[C$stop_name == cc[which.max(mres), stop_name], ]))
-  win2 <- st_as_sfc(st_bbox(st_buffer(ctr2, 900)))
-  clip2 <- function(x) suppressWarnings(st_intersection(x, win2))
-  vc_w2 <- clip2(vc); mb_w2 <- mb[lengths(st_intersects(mb, win2)) > 0, ]; osi_w2 <- clip2(st_line_merge(st_union(st_cast(st_geometry(osi), "MULTILINESTRING"))))
-  os_lab2 <- suppressWarnings(st_point_on_surface(clip2(osi)))
-  os_lab2 <- os_lab2[as.numeric(st_area(clip2(osi)))[match(os_lab2$name, clip2(osi)$name)] > 2e5, ]
-  cat(sprintf("Municipal window around %s: %d municipal buildings, %d residents in them; osiedla: %s\n", cc[which.max(mres), stop_name], nrow(mb_w2), sum(mb_w2$pop),
-              paste(sprintf("%s %.2f", os_lab2$name, os_lab2$dep), collapse = "; ")))
+  W1 <- window("Os. Kosmonautów"); W2 <- window(cc[which.max(mres), stop_name], lab_min = 2e5); W3 <- window("Niezłomnych")
 
   ## ── panels ───────────────────────────────────────────────────────────────
   L <- ceiling(10 * max(abs(c(D$unemp, D$poverty)))) / 10
-  dscale <- scale_fill_gradient2(low = "#2a78d6", mid = "#f0efec", high = "#e34948", midpoint = 0, limits = c(-L, L),
+  dscale <- scale_fill_gradient2(low = "#2a78d6", mid = "#f0efec", high = "#e34948", midpoint = 0, limits = c(-L, L), na.value = "#dcdad2",
                                  name = "Deprivation (z; + = more deprived)", guide = guide_colourbar(barwidth = 12, barheight = 0.5, title.position = "top"), aesthetics = c("fill", "colour"))
+  mscale <- scale_fill_gradient(low = "#f0efec", high = "#4a3aa7", limits = c(0, 0.4), oob = scales::squish, na.value = "#dcdad2", labels = function(x) paste0(100 * x, "%"),
+                                name = "Residents in municipal buildings", guide = guide_colourbar(barwidth = 10, barheight = 0.5, title.position = "top"))
   mth <- theme_void(base_size = 9.5) + theme(plot.background = element_rect(fill = surf, colour = NA), legend.position = "bottom",
     legend.title = element_text(colour = ink, size = 8.5), legend.text = element_text(colour = ink2, size = 8), plot.tag = element_text(face = "bold"),
     plot.subtitle = element_text(colour = ink, size = 8.5, hjust = 0.5, margin = margin(b = 3)))
-  cw <- st_cast(st_geometry(win), "LINESTRING")
   sscale <- scale_size_area(max_size = 3.2, limits = c(0, max(pp$pop)), breaks = c(10, 100, 500), name = "Residents per address (g)", guide = guide_legend(title.position = "top", override.aes = list(fill = "#8f8d86")))
   fmt1 <- function(x) { v <- sprintf("%.1f", x); v[v == "-0.0"] <- "0.0"; sub("-", "−", v) }
   city_map <- function(v, sub) ggplot(osi) + geom_sf(aes(fill = .data[[v]]), colour = "#ffffff", linewidth = 0.25) + dscale + labs(subtitle = sub) + mth
+  ## zoomed panels, for any window
+  zoom <- function(W, p) p + coord_sf(xlim = W$b[c(1, 3)], ylim = W$b[c(2, 4)], expand = FALSE, datum = NA) +
+    theme(panel.border = element_rect(fill = NA, colour = ink, linewidth = 0.5))
+  os_lines <- function(W) geom_sf(data = W$osi, colour = ink, linewidth = 0.55, linetype = "22")
+  os_names <- function(W) geom_sf_text(data = W$os_lab, aes(label = gsub(" ", "\n", name)), size = 2.1, colour = ink, lineheight = 0.85, fontface = "italic")
+  pole_pts <- function(W) list(geom_sf(data = W$poles, aes(shape = "Stops (poles in b and d, complexes in e)"), fill = ink, colour = "#ffffff", size = 1.5, stroke = 0.4),
+                               scale_shape_manual(values = c("Stops (poles in b and d, complexes in e)" = 21), name = NULL))
+  p_net <- function(W) zoom(W, ggplot() + geom_sf(data = W$ways, colour = "#8f8d86", linewidth = 0.22) + os_lines(W) + pole_pts(W) + os_names(W) +
+    labs(subtitle = "Pedestrian network and stop poles") + mth)
+  p_catch <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, fill = "#dcdad2", colour = "#ffffff", linewidth = 1) +
+    geom_sf(data = W$ways, colour = "#b8b6ae", linewidth = 0.15) + os_lines(W) + pole_pts(W) +
+    labs(subtitle = "Walking catchments (nearest pole, up to 400 m)") + mth)
+  p_res <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, fill = "#f6f5f2", colour = "#c9c7c0", linewidth = 0.3) + os_lines(W) +
+    geom_sf(data = W$pp[order(W$pp$pop), ], aes(size = pop, fill = dep), colour = "#9d9b94", stroke = 0.15, shape = 21) + sscale + dscale +
+    labs(subtitle = "Residents, coloured by their osiedle's score") + mth)
+  p_cdep <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = cdep), colour = "#ffffff", linewidth = 0.5) + dscale + os_lines(W) + pole_pts(W) +
+    geom_sf_label(data = W$lab, aes(label = fmt1(cdep)), size = 2, colour = ink, fill = "#ffffff", alpha = 0.8, linewidth = 0, label.padding = unit(0.08, "lines")) +
+    labs(subtitle = "Catchment deprivation: residents' mean") + mth)
+  p_muni <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = muni_share), colour = "#ffffff", linewidth = 0.5) + mscale + os_lines(W) +
+    geom_sf(data = W$mb, aes(size = pop), shape = 22, fill = ink, colour = "#ffffff", stroke = 0.2) + scale_size_area(max_size = 2.4, guide = "none") + os_names(W) +
+    labs(subtitle = "Municipal share of catchment residents") + mth)
+  all_stops <- function() ggplot() + geom_sf(data = city, fill = "#f3f2ee", colour = "#c3c2b7", linewidth = 0.3) +
+    geom_sf(data = vc[!is.na(vc$cdep), ], aes(fill = cdep), colour = NA) + geom_sf(data = vc[is.na(vc$cdep), ], fill = "#c9c7c0", colour = NA) +
+    geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + dscale
+
+  ## full version, twelve panels (supplement)
   pa <- city_map("unemp", "Registered unemployment")
   pb <- city_map("poverty", "Social-assistance poverty")
-  pc <- city_map("dep", "Deprivation score: mean of a and b") + geom_sf(data = cw, colour = ink, linewidth = 0.5)
+  pc <- city_map("dep", "Deprivation score: mean of a and b") + geom_sf(data = W1$line, colour = ink, linewidth = 0.5)
   pd <- ggplot() + geom_sf(data = city, fill = "#f3f2ee", colour = "#c3c2b7", linewidth = 0.3) +
     geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.3) +
     geom_sf(data = pp, aes(size = pop), colour = ink, alpha = 0.3, stroke = 0, shape = 16) +
     scale_size_area(max_size = 1.3, guide = "none") +
-    geom_sf(data = cw, colour = ink, linewidth = 0.5) + labs(subtitle = "Registered residents at addresses") + mth
-  zoom <- function(p) p + coord_sf(xlim = st_bbox(win)[c(1, 3)], ylim = st_bbox(win)[c(2, 4)], expand = FALSE, datum = NA) +
-    theme(panel.border = element_rect(fill = NA, colour = ink, linewidth = 0.5))
-  os_lines <- geom_sf(data = osi_w, colour = ink, linewidth = 0.55, linetype = "22")
-  pole_pts <- list(geom_sf(data = poles_w, aes(shape = "Stops (poles in b and d, complexes in e)"), fill = ink, colour = "#ffffff", size = 1.5, stroke = 0.4),
-                   scale_shape_manual(values = c("Stops (poles in b and d, complexes in e)" = 21), name = NULL))
-  pe <- zoom(ggplot() + geom_sf(data = ways, colour = "#8f8d86", linewidth = 0.22) + os_lines + pole_pts +
-    geom_sf_text(data = os_lab, aes(label = gsub(" ", "\n", name)), size = 2.1, colour = ink, lineheight = 0.85, fontface = "italic") +
-    labs(subtitle = "Pedestrian network and stop poles") + mth)
-  pf <- zoom(ggplot() + geom_sf(data = vc_w, fill = "#dcdad2", colour = "#ffffff", linewidth = 1) +
-    geom_sf(data = ways, colour = "#b8b6ae", linewidth = 0.15) + os_lines + pole_pts +
-    labs(subtitle = "Walking catchments (nearest pole, up to 400 m)") + mth)
-  pg <- zoom(ggplot() + geom_sf(data = vc_w, fill = "#f6f5f2", colour = "#c9c7c0", linewidth = 0.3) + os_lines +
-    geom_sf(data = pp_w[order(pp_w$pop), ], aes(size = pop, fill = dep), colour = "#ffffff", stroke = 0.15, shape = 21) +
-    sscale + dscale +
-    labs(subtitle = "Residents, coloured by their osiedle's score") + mth)
-  ph <- zoom(ggplot() + geom_sf(data = vc_w, aes(fill = cdep), colour = "#ffffff", linewidth = 0.5) + dscale + os_lines + pole_pts +
-    geom_sf_label(data = lab_w, aes(label = fmt1(cdep)), size = 2, colour = ink, fill = "#ffffff", alpha = 0.8,
-                  linewidth = 0, label.padding = unit(0.08, "lines")) +
-    labs(subtitle = "Catchment deprivation: residents' mean") + mth)
-  pi <- ggplot() + geom_sf(data = city, fill = "#f3f2ee", colour = "#c3c2b7", linewidth = 0.3) +
-    geom_sf(data = vc[!is.na(vc$cdep), ], aes(fill = cdep), colour = NA) + geom_sf(data = vc[is.na(vc$cdep), ], fill = "#c9c7c0", colour = NA) +
-    geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + dscale +
-    geom_sf(data = cw, colour = ink, linewidth = 0.5) + labs(subtitle = "Catchment deprivation of every stop") + mth
-  ## row 4: municipal housing, the finer indicator within osiedla
-  cw2 <- st_cast(st_geometry(win2), "LINESTRING")
-  mscale <- scale_fill_gradient(low = "#f0efec", high = "#4a3aa7", limits = c(0, 0.4), oob = scales::squish, na.value = "#dcdad2", labels = function(x) paste0(100 * x, "%"),
-                                name = "Residents in municipal buildings", guide = guide_colourbar(barwidth = 10, barheight = 0.5, title.position = "top"))
+    geom_sf(data = W1$line, colour = ink, linewidth = 0.5) + labs(subtitle = "Registered residents at addresses") + mth
+  pe <- p_net(W1); pf <- p_catch(W1); pg <- p_res(W1); ph <- p_cdep(W1)
+  pi <- all_stops() + geom_sf(data = W1$line, colour = ink, linewidth = 0.5) + labs(subtitle = "Catchment deprivation of every stop") + mth
   pj <- ggplot() + geom_sf(data = city, fill = "#f3f2ee", colour = "#c3c2b7", linewidth = 0.3) +
     geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.3) +
     geom_sf(data = mb[order(mb$pop), ], aes(size = pop), shape = 21, fill = "#4a3aa7", colour = "#ffffff", stroke = 0.15, alpha = 0.85) +
-    scale_size_area(max_size = 2.2, guide = "none") + geom_sf(data = cw2, colour = ink, linewidth = 0.5) +
+    scale_size_area(max_size = 2.2, guide = "none") + geom_sf(data = W2$line, colour = ink, linewidth = 0.5) +
     labs(subtitle = "Municipal housing: buildings with residents") + mth
-  pk <- ggplot() + geom_sf(data = vc_w2, aes(fill = muni_share), colour = "#ffffff", linewidth = 0.5) + mscale +
-    geom_sf(data = osi_w2, colour = ink, linewidth = 0.55, linetype = "22") +
-    geom_sf(data = mb_w2, aes(size = pop), shape = 22, fill = ink, colour = "#ffffff", stroke = 0.2) + scale_size_area(max_size = 2.4, guide = "none") +
-    geom_sf_text(data = os_lab2, aes(label = gsub(" ", "\n", name)), size = 2.1, colour = ink, lineheight = 0.85, fontface = "italic") +
-    coord_sf(xlim = st_bbox(win2)[c(1, 3)], ylim = st_bbox(win2)[c(2, 4)], expand = FALSE, datum = NA) +
-    labs(subtitle = "Municipal share of catchment residents") + mth + theme(panel.border = element_rect(fill = NA, colour = ink, linewidth = 0.5))
+  pk <- p_muni(W2)
   pl <- ggplot(mc, aes(os_dep, 100 * muni_share)) + geom_hline(yintercept = 0, colour = "#c3c2b7") +
     geom_point(shape = 16, size = 1.1, alpha = 0.45, colour = "#4a3aa7", position = position_jitter(width = 0.03, height = 0, seed = 1)) +
     scale_y_sqrt(breaks = c(0, 1, 5, 10, 25, 50, 100)) + scale_x_continuous(breaks = -1:2) +
     labs(x = "Deprivation score of the catchment's main osiedle", y = "Residents in municipal\nbuildings (%, square-root scale)", subtitle = "Variation within osiedla") +
     theme_minimal(base_size = 9.5) + theme(panel.grid.minor = element_blank(), plot.subtitle = element_text(colour = ink, size = 8.5, hjust = 0.5, margin = margin(b = 3)),
                                            axis.title = element_text(colour = ink2, size = 8), axis.text = element_text(colour = ink2, size = 7.5), plot.tag = element_text(face = "bold"))
-  ## full version, twelve panels (supplement)
   f <- (pa + pb + pc) / (pd + pe + pf) / (pg + ph + pi) / (pj + pk + pl) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
     theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA)) &
     scale_shape_manual(values = c("Stops (poles in b and d, complexes in e)" = 21), labels = "Stop poles", name = NULL)
   ggsave(file.path(fig, "Fig_construction_full.png"), f, width = 11, height = 16.2, dpi = 300, bg = surf)
-  ## main version, six panels: (a) score; Winogrady window (b) catchments on the network, (c) residents, (d) catchment
-  ## deprivation; (e) all stops; (f) municipal share in the Stare Miasto-Wilda window (solid and dashed squares in a and e)
-  b1 <- st_bbox(win); b2 <- st_bbox(win2)
-  win_marks <- list(geom_sf(data = cw, colour = ink, linewidth = 0.5), geom_sf(data = cw2, colour = ink, linewidth = 0.5, linetype = "22"),
-                    annotate("label", x = b1[["xmax"]] + 250, y = b1[["ymax"]], label = "b–d", hjust = 0, vjust = 1, size = 2.6, colour = ink, fill = "#ffffff",
-                             linewidth = 0, label.padding = unit(0.1, "lines")),
-                    annotate("label", x = b2[["xmin"]] - 250, y = b2[["ymin"]], label = "f", hjust = 1, vjust = 0, size = 2.6, colour = ink, fill = "#ffffff",
-                             linewidth = 0, label.padding = unit(0.1, "lines")))
-  qa <- city_map("dep", "Deprivation score by osiedle") + win_marks
-  qb <- pf + geom_sf_text(data = os_lab, aes(label = gsub(" ", "\n", name)), size = 2.1, colour = ink, lineheight = 0.85, fontface = "italic") +
-    labs(subtitle = "Walking catchments on the pedestrian network")
-  qc <- pg + scale_size_area(max_size = 3.2, limits = c(0, max(pp$pop)), breaks = c(10, 100, 500), name = "Residents per address (c)",
-                             guide = guide_legend(title.position = "top", override.aes = list(fill = "#8f8d86")))
-  qe <- ggplot() + geom_sf(data = city, fill = "#f3f2ee", colour = "#c3c2b7", linewidth = 0.3) +
-    geom_sf(data = vc[!is.na(vc$cdep), ], aes(fill = cdep), colour = NA) + geom_sf(data = vc[is.na(vc$cdep), ], fill = "#c9c7c0", colour = NA) +
-    geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + dscale + win_marks +
-    geom_sf(data = st_centroid(st_geometry(C)), colour = ink, size = 0.35, stroke = 0, shape = 16, alpha = 0.8) +
+
+  ## main version, six panels, one window (W3) for every zoomed panel, marked in a and e
+  mark <- list(geom_sf(data = W3$line, colour = ink, linewidth = 0.5),
+               annotate("label", x = W3$b[["xmax"]] + 250, y = W3$b[["ymax"]], label = "b–d, f", hjust = 0, vjust = 1, size = 2.6, colour = ink, fill = "#ffffff",
+                        linewidth = 0, label.padding = unit(0.1, "lines")))
+  qa <- city_map("dep", "Deprivation score by osiedle") + mark
+  qb <- p_catch(W3) + os_names(W3) + labs(subtitle = "Walking catchments on the pedestrian network")
+  qc <- p_res(W3) + scale_size_area(max_size = 4.6, limits = c(0, max(pp$pop)), breaks = c(10, 100, 500), name = "Residents per address (c)",
+                                    guide = guide_legend(title.position = "top", override.aes = list(fill = "#8f8d86")))
+  qd <- p_cdep(W3)
+  qe <- all_stops() + mark + geom_sf(data = st_centroid(st_geometry(C)), colour = ink, size = 0.35, stroke = 0, shape = 16, alpha = 0.8) +
     labs(subtitle = "Catchment deprivation of every stop") + mth
-  f6 <- (qa + qb + qc) / (ph + qe + pk) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
+  qf <- p_muni(W3)
+  f6 <- (qa + qb + qc) / (qd + qe + qf) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
     theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA))
   ggsave(file.path(fig, "Fig_construction.png"), f6, width = 11, height = 8.4, dpi = 300, bg = surf)
   file.copy(file.path(fig, c("Fig_construction.png", "Fig_construction_full.png")), ms_fig, overwrite = TRUE)
@@ -290,7 +287,7 @@ section("60", "Figure 3: where the more and less deprived areas lie", {
     geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + ms_outline(L) +
     geom_sf(data = segs, aes(linewidth = departures, colour = mode), lineend = "round") +
     scale_linewidth_continuous(range = c(0.12, 2.4), breaks = c(100, 300, 600), name = "Departures per weekday") +
-    scale_colour_manual(values = c(Tram = ink, Bus = "#8f8d86"), name = NULL) + guides_ + ms_north(L, pos = c(1.0, 0.95)) +
+    scale_colour_manual(values = c(Tram = ink, Bus = "#8f8d86"), name = NULL) + guides_ +
     coord_sf(datum = NA) + labs(title = "Transit network over compact pre-war blocks (beige)") + theme_ms() +
     guides(colour = guide_legend(override.aes = list(linewidth = 1.2)))
   f <- (pa | pb) + plot_annotation(tag_levels = "a") & theme(plot.background = element_rect(fill = surf, colour = NA))
@@ -299,8 +296,8 @@ section("60", "Figure 3: where the more and less deprived areas lie", {
   cat("Saved Fig_deprived_areas_map.png\n")
 })
 
-## ── 64 · Figure 9: the gaps and their parts ────────────────────────────────────────────────────────────────
-section("64", "Figure 9: the gaps and their parts", {
+## ── 64 · Figure 10: the gaps and their parts ───────────────────────────────────────────────────────────────
+section("64", "Figure 10: the gaps and their parts", {
   ## Figure replacing the 22-row table of the gaps (main text): for every measure, the raw slope on
   ## deprivation (open circle), the parts of it accounted for by location, service at the stop, land use and
   ## population (stacked bars; Gelbach decomposition of script 56, primary specification), and the
@@ -373,7 +370,7 @@ section("71", "Figure 5: deprivation of destinations", {
   pb <- mp("observed", "Reached by riders", sc_dep)
   dl <- max(abs(W$diff), na.rm = TRUE)
   pc <- mp("diff", "Reached minus offered", scale_fill_gradient2(low = "#2f8f83", mid = "#f0efec", high = "#a3527d", midpoint = 0, limits = c(-dl, dl),
-                                                                 name = "Reached minus offered (z)")) + ms_north(L)
+                                                                 name = "Reached minus offered (z)"))
   S <- melt(W, id.vars = c("stop_name", "dep"), measure.vars = c("network", "observed"), variable.name = "comp", value.name = "dd")
   S[, comp := factor(comp, levels = c("network", "observed"), labels = c("Offered by the network", "Reached by riders"))]
   co <- S[, as.list(coef(lm(dd ~ dep))), by = comp]; setnames(co, c("comp", "a", "b"))
@@ -390,8 +387,8 @@ section("71", "Figure 5: deprivation of destinations", {
   cat("Saved Fig_destinations_main.png\n")
 })
 
-## ── 70 · Figure 8: route networks ──────────────────────────────────────────────────────────────────────────
-section("70", "Figure 8: route networks", {
+## ── 70 · Route networks of each third (supplementary S7) ───────────────────────────────────────────────────
+section("70", "Route networks of each third (supplementary S7)", {
   ## Route networks of riders from the least and the most deprived thirds (main text), Monday-Thursday:
   ## (a) least deprived third, (b) most deprived third: share of the group's riders passing each segment;
   ## (c) most minus least: segments used relatively more by riders from the most deprived third (red) or the
@@ -427,7 +424,7 @@ section("70", "Figure 8: route networks", {
     geom_segment(data = DF[abs(diff) >= 0.002][order(abs(diff))], aes(X1, Y1, xend = X2, yend = Y2, colour = pmax(pmin(diff, m), -m), linewidth = pmin(abs(diff), m)), lineend = "round") +
     scale_colour_gradient2(low = MSTY$least, mid = "#d9d7d0", high = MSTY$most, midpoint = 0, limits = c(-m, m), labels = function(v) paste0(ifelse(v > 0, "+", ""), round(100 * v), " pp"),
                            name = "Most minus least deprived third") +
-    scale_linewidth(range = c(0.25, 3), guide = "none") + ms_labels(L, LAB, size = 2.3) + ms_centre(L) + ms_north(Lz) + zoom +
+    scale_linewidth(range = c(0.25, 3), guide = "none") + ms_labels(L, LAB, size = 2.3) + ms_centre(L) + zoom +
     labs(title = "Used relatively more by each group") + theme_ms()
   g <- (pa | pb | pc) + plot_annotation(tag_levels = "a") + plot_layout(guides = "keep")
   ggsave(file.path(fig, "Fig_route_networks_main.png"), g, width = 14, height = 6.4, dpi = 250, bg = "#ffffff")
@@ -470,7 +467,7 @@ section("69", "Figure 4: what the timetable offers", {
 
   pm <- ggplot() + ms_base(L) + geom_sf(data = P, aes(fill = col), colour = NA) + scale_fill_identity() + ms_water_top(L) + ms_outline(L) +
     ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Chartowo", "Główna", "Krzesiny", "Głuszyna", "Fabianowo-Kotowo")) +
-    ms_centre(L) + ms_scalebar(L) + ms_north(L) + ms_coord(L) + theme_ms() + labs(title = "Deprivation and access to jobs, by stop catchment")
+    ms_centre(L) + ms_scalebar(L) + ms_coord(L) + theme_ms() + labs(title = "Deprivation and access to jobs, by stop catchment")
   ## legend: 3 x 3 tiles with the share of residents in each cell
   LG <- merge(BV, D[, .(res = sum(residents)), by = .(i, j)], by = c("i", "j"), all.x = TRUE)[is.na(res), res := 0][, share := 100 * res / sum(res)]
   pl <- ggplot(LG, aes(j, i)) + geom_tile(aes(fill = col), colour = "#ffffff", linewidth = 0.8) + scale_fill_identity() +

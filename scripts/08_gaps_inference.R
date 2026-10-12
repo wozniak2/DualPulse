@@ -18,6 +18,12 @@
 ##   75      Peripheral deprivation: what the network offers deprived areas far from the centre
 ##   76      Early boardings: the early offer, its use, and what sector stands for
 ##   77      What location stands for: jobs nearby and the structure of service
+##   78      Segregation by destination: geography, network and riders
+##   79      Segregation on the network: corridors, axes and co-presence
+##   80      Benchmark: the same flows with deprivation scattered at random
+##   82      Benchmark: the same deprivation map turned around the centre
+##   83      Meeting places: who arrives at the stops
+##   81      Map: two streams on the network
 ##
 ## Run from the repository root: Rscript run.R 8   (one section: Rscript run.R 8:73)
 
@@ -1300,4 +1306,585 @@ section("77", "What location stands for: jobs nearby and the structure of servic
   fwrite(OUT, file.path(s2, "location_mechanisms.csv"))
   print(OUT[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 3) else x)])
   cat("\nSaved location_mechanisms.csv\n")
+})
+
+## ── 78 · Segregation by destination: geography, network and riders ─────────────────────────────────────────
+section("78", "Segregation by destination: geography, network and riders", {
+  ## Riders from more deprived catchments are carried to more deprived places (section 46). How much of this
+  ## experienced segregation comes from the geography of deprivation (deprived districts lie next to each
+  ## other), how much the network adds (where its lines run) and how much riders remove (which lines and
+  ## directions they board)? Three layers of each origin's mean destination deprivation:
+  ##   geography  riders travel the same straight-line distances as observed (250 m bands) but in any
+  ##              direction: each band's flow goes to the complexes at that distance from the origin in
+  ##              proportion to their city-wide weekday alightings (uniform weights and 500 m bands as checks);
+  ##   network    the departure-weighted baseline of section 46 (what the lines at the stop offer);
+  ##   observed   the estimated flows.
+  ## observed = geography + (network - geography) + (observed - network); slopes on origin deprivation in SD of
+  ## the observed measure, raw, net of position and net of land use and population (CR2-Satterthwaite by
+  ## osiedle). Origins: those of section 46 (weekday all day; morning peak as a check). Destinations beyond the
+  ## city and destination catchments without residents are left out, as in section 46.
+  ## Inputs: od flows (40, 41), dest_mech_profiles.csv (46), gap_stops.rds (56), catchment covariates (34).
+  ## Outputs: output/stage2/segregation_destination.csv, segregation_destination_tests.csv
+
+  suppressPackageStartupMessages({library(data.table); library(sf); library(splines)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/od_expand.R")); source(file.path(REPO, "R/cr_inference.R"))
+  s2 <- file.path(out_dir, "output/stage2")
+  MON <- c(3:6, 10)
+  od <- rbindlist(lapply(sprintf("%02d", MON), function(m) expand_od(readRDS(file.path(s2, "od", sprintf("od_2025_%s.rds", m))))[
+    daytype == "monthu" & o != "outside" & d != "outside", .(flow = sum(flow)), by = .(o, d, period)]))
+  od <- od[, .(flow = sum(flow)), by = .(o, d, period)]
+  C <- st_read(file.path(s2, "stop_complexes.gpkg"), "complexes", quiet = TRUE)
+  XY <- data.table(stop_name = C$stop_name, X = st_coordinates(C)[, 1], Y = st_coordinates(C)[, 2])
+  cv <- fread(file.path(s2, "catchment_covariates_network.csv"), encoding = "UTF-8")[, .(stop_name, dep)]
+  att <- od[, .(A = sum(flow)), by = .(stop_name = d)]
+  DC <- merge(merge(XY, cv, by = "stop_name"), att, by = "stop_name", all.x = TRUE)[!is.na(dep)][is.na(A), A := 0]
+  WIN <- list("weekday all day" = c("night", "early", "am_peak", "midday", "pm_peak", "evening"), "weekday morning peak (06-09)" = "am_peak")
+  PR <- fread(file.path(s2, "dest_mech_profiles.csv"), encoding = "UTF-8")[transfers == "none" & comp %in% c("observed", "network") & window %in% names(WIN)]
+  G <- readRDS(file.path(s2, "gap_stops.rds"))
+
+  ## geography layer: for each origin, the flow in each distance band spread over the complexes in that band
+  geo_layer <- function(w, band = 0.25, weight = "alightings") {
+    f <- od[period %in% WIN[[w]], .(flow = sum(flow)), by = .(o, d)]
+    f <- merge(merge(f, XY[, .(o = stop_name, oX = X, oY = Y)], by = "o"), XY[, .(d = stop_name, dX = X, dY = Y)], by = "d")
+    f[, b := floor(sqrt((dX - oX)^2 + (dY - oY)^2) / 1000 / band)]
+    FB <- f[o != d, .(F = sum(flow)), by = .(o, b)]
+    O <- XY[stop_name %in% unique(FB$o)]
+    E <- rbindlist(lapply(seq_len(nrow(O)), function(r) {
+      dd <- DC[stop_name != O$stop_name[r]]
+      dd[, b := floor(sqrt((X - O$X[r])^2 + (Y - O$Y[r])^2) / 1000 / band)]
+      wt <- if (weight == "alightings") dd$A else rep(1, nrow(dd))
+      dd[, w := wt][w > 0, .(Eb = sum(w * dep) / sum(w)), by = b][, o := O$stop_name[r]]
+    }))
+    merge(FB, E, by = c("o", "b"))[, .(geo = sum(F * Eb) / sum(F)), by = .(stop_name = o)]
+  }
+  LOC <- c("ns(dist_km, 3)", "sec_s1", "sec_c1", "sec_s2", "sec_c2"); SERV <- c("l_lines", "l_dep", "tram_share", "direct_centre")
+  LUSE <- c("b1", "b2", "b3", "b4", "landuse_mix", "fsi", "wc_tree"); POPV <- c("share_0_18", "share_61plus", "lres", "larea")
+  STEPS <- list(raw = character(0), position = c(LOC, SERV), full = c(LOC, SERV, LUSE, POPV))
+  zs <- function(v) (v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE)
+  CV <- c("stop_name", "dep", "dist_km", "osiedle", "third", "sec_s1", "sec_c1", "sec_s2", "sec_c2", SERV, LUSE, POPV)
+  OUT <- list(); TS <- list()
+  for (w in names(WIN)) {
+    L <- dcast(PR[window == w], stop_name ~ comp, value.var = "dest_dep")
+    L <- merge(L, geo_layer(w), by = "stop_name")
+    L <- merge(L, setnames(geo_layer(w, weight = "uniform"), "geo", "geo_uniform"), by = "stop_name")
+    L <- merge(L, setnames(geo_layer(w, band = 0.5), "geo", "geo_500m"), by = "stop_name")
+    L <- merge(G[, ..CV], L, by = "stop_name")
+    OUT[[w]] <- copy(L)[, window := w]
+    s <- sd(L$observed)
+    for (v in c(SERV, LUSE, POPV)) L[, (v) := zs(get(v))]
+    L[, `:=`(dz = zs(dep), y_obs = observed / s, y_geo = geo / s, y_net_geo = (network - geo) / s, y_use = (observed - network) / s,
+             y_net = network / s, y_geo_u = geo_uniform / s, y_geo_5 = geo_500m / s)]
+    for (st in names(STEPS)) for (y in c("y_obs", "y_geo", "y_net_geo", "y_use", "y_net", "y_geo_u", "y_geo_5")) {
+      f <- lm(reformulate(c("dz", STEPS[[st]]), y), L); ci <- crinf(f, L$osiedle, "dz")
+      TS[[length(TS) + 1]] <- data.table(window = w, step = st, layer = y, est = ci$b, lo = ci$b - qt(0.975, ci$df) * ci$se2,
+                                         hi = ci$b + qt(0.975, ci$df) * ci$se2, p = 2 * pt(-abs(ci$b / ci$se2), ci$df), n = nobs(f))
+    }
+  }
+  OUT <- rbindlist(OUT); TS <- rbindlist(TS)
+  fwrite(OUT, file.path(s2, "segregation_destination.csv")); fwrite(TS, file.path(s2, "segregation_destination_tests.csv"))
+  cat(sprintf("Origins: %s\n", paste(OUT[, .N, by = window][, sprintf("%s %d", window, N)], collapse = "; ")))
+  cat("Medians of destination deprivation by third (geography / network / observed):\n")
+  print(OUT[third != "middle", .(geo = round(median(geo), 2), geo_uniform = round(median(geo_uniform), 2), network = round(median(network), 2),
+                                 observed = round(median(observed), 2), n = .N), by = .(window, third)][order(window, third)])
+  cat("\nSlopes on origin deprivation (SD of the observed measure per SD); observed = geography + network added + use:\n")
+  print(dcast(TS, window + step ~ layer, value.var = "est")[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 2) else x)][
+    , .(window, step, observed = y_obs, geography = y_geo, network_added = y_net_geo, use = y_use, network = y_net, geo_uniform = y_geo_u, geo_500m = y_geo_5)])
+  cat("p-values:\n")
+  print(dcast(TS, window + step ~ layer, value.var = "p")[, lapply(.SD, function(x) if (is.numeric(x)) signif(x, 2) else x)][
+    , .(window, step, observed = y_obs, geography = y_geo, network_added = y_net_geo, use = y_use)])
+  cat("\nSaved segregation_destination.csv, segregation_destination_tests.csv\n")
+})
+
+## ── 79 · Segregation on the network: corridors, axes and co-presence ───────────────────────────────────────
+section("79", "Segregation on the network: corridors, axes and co-presence", {
+  ## Do riders from more and less deprived catchments share the network? Every estimated weekday ride from the
+  ## catchments of section 56 (stops with residents, not flagged) is traced along the stop sequence its line
+  ## runs (as in section 53) and loaded onto each stop-to-stop segment it passes, in each period of the day.
+  ## Two layers: observed flows, and the network offer (section 46 with timing kept: within each period, a
+  ## stop's riders spread over its lines and directions in proportion to departures, each line keeping its
+  ## observed destinations).
+  ## Measures, on rider-km:
+  ##   corridors   undirected segments, all lines and periods together: overlap of the ride-km of the least
+  ##               and the most deprived thirds (1 - dissimilarity); share of each group's ride-km on segments
+  ##               closer to east-west than to north-south, and its axial mean direction in degrees from
+  ##               east-west (0 = east-west, 90 = north-south); overlap within and
+  ##               beyond 2 km of the Old Market Square;
+  ##   co-presence line x direction x segment x period cells (riders on the same line and segment at the same
+  ##               time of day): isolation of each third (mean share of its own third among fellow riders
+  ##               with a known origin, against its share of all such riders), exposure of each third to the
+  ##               other, and the variance ratio (eta2) of riders' origin deprivation between cells;
+  ##               the same between corridors.
+  ## Windows: Monday-Thursday (all day and its morning peak) and the weekend (Saturdays, Sundays and public
+  ## holidays together; the offer uses weekend departures), March-June and October.
+  ## Only riders boarding at the catchments of section 56 have an origin deprivation; their share of all
+  ## rider-km is reported. Intervals: 499 bootstrap resamples of the origins' osiedla, also for the difference
+  ## between observed and offer and between weekend and weekday.
+  ## Inputs: od flows (40, 41), stage2_line_stop_cells.rds (41), PEKA visit records (stop sequences), GTFS,
+  ##         gap_stops.rds (56). Outputs: output/stage2/segregation_network.csv, segregation_network_corridors.csv
+
+  suppressPackageStartupMessages({library(data.table); library(sf)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/od_expand.R"))
+  s2 <- file.path(out_dir, "output/stage2")
+  MON <- c(3:6, 10); t0 <- Sys.time(); set.seed(79)
+  C <- st_read(file.path(s2, "stop_complexes.gpkg"), "complexes", quiet = TRUE)
+  ctr <- st_coordinates(st_transform(st_sfc(st_point(c(16.9335, 52.4083)), crs = 4326), st_crs(C)))[1, ]
+  gs <- fread(file.path(GTFS_DIR, "stops.txt"), encoding = "UTF-8")[, code := sub("[0-9]+$", "", stop_code)]
+  gt <- unique(gs[, .(code, stop_name)])[stop_name %in% C$stop_name][!duplicated(code)]
+  cc <- gs[, .(lon = mean(stop_lon), lat = mean(stop_lat)), by = code]
+  xy <- st_coordinates(st_transform(st_as_sf(cc, coords = c("lon", "lat"), crs = 4326), st_crs(C))); cc[, `:=`(X = xy[, 1], Y = xy[, 2])]
+  city_codes <- gt$code; cx2code <- setNames(gt$code, gt$stop_name)
+
+  ## stop sequences actually run (three most common per line x direction), as in section 53
+  SEQ <- rbindlist(lapply(sprintf("%02d", MON), function(m) {
+    x <- readRDS(sprintf(file.path(PEKA_TABLES, "peka_2025_%s.rds"), m)); setDT(x)
+    x <- unique(x[!is.na(SYM_PRZYST) & !is.na(NR_LINI) & NR_LINI != "", .(DT_KARTY, ID_KURSU, LP_PRZYST, NR_LINI, SYM_PRZYST)], by = c("DT_KARTY", "ID_KURSU", "LP_PRZYST"))
+    setorder(x, DT_KARTY, ID_KURSU, LP_PRZYST)
+    tr <- x[, .(NR_LINI = NR_LINI[1], dir = SYM_PRZYST[.N], seq = paste(SYM_PRZYST, collapse = ">")), by = .(DT_KARTY, ID_KURSU)]
+    rm(x); gc(); tr[, .N, by = .(NR_LINI, dir, seq)]
+  }))
+  SEQ <- SEQ[, .(N = sum(N)), by = .(NR_LINI, dir, seq)][order(NR_LINI, dir, -N)][, rk := seq_len(.N), by = .(NR_LINI, dir)][rk <= 3]
+
+  ## flows, origins and the offer
+  G <- readRDS(file.path(s2, "gap_stops.rds"))[, .(o = stop_name, dep, third, osiedle)]
+  wk <- function(dt) fifelse(dt == "monthu", "weekday", "weekend")
+  od <- rbindlist(lapply(sprintf("%02d", MON), function(m) expand_od(readRDS(file.path(s2, "od", sprintf("od_2025_%s.rds", m))))[
+    daytype %in% c("monthu", "sat", "sunhol"), .(flow = sum(flow), fkm = sum(fkm)), by = .(o, d, NR_LINI, dir, win = wk(daytype), period)]))
+  od <- od[, .(flow = sum(flow), fkm = sum(fkm)), by = .(o, d, NR_LINI, dir, win, period)]
+  tot_rkm <- od[, .(all = sum(fkm)), by = win]
+  od <- od[o %in% G$o]
+  dep <- readRDS(file.path(s2, "stage2_line_stop_cells.rds"))[daytype %in% c("monthu", "sat", "sunhol") & month %in% MON,
+           .(dp = sum(departures)), by = .(o = stop_name, NR_LINI, dir, win = wk(daytype), period = as.character(period))]
+  Bl <- merge(od[, .(B = sum(flow)), by = .(o, NR_LINI, dir, win, period)], dep, by = c("o", "NR_LINI", "dir", "win", "period"), all.x = TRUE)
+  cov <- merge(od[, .(assigned = sum(fkm)), by = win], tot_rkm, by = "win")
+  cat("Assigned riders (catchments of section 56), share of rider-km:", paste(cov[, sprintf("%s %.0f%%", win, 100 * assigned / all)], collapse = "; "),
+      sprintf("| their flows on lines without a departure record: %.1f%%\n", 100 * Bl[is.na(dp) | dp == 0, sum(B)] / Bl[, sum(B)]))
+  Bl <- Bl[!is.na(dp) & dp > 0][, wB := dp / sum(dp) * sum(B), by = .(o, win, period)]
+  od <- merge(od, Bl[, .(o, NR_LINI, dir, win, period, r = wB / B)], by = c("o", "NR_LINI", "dir", "win", "period"))
+  od[, flow_off := flow * r][, r := NULL]
+  od <- merge(od, G, by = "o")
+  od[, `:=`(oc = cx2code[o], dc = fifelse(d == "outside", NA_character_, cx2code[d]))]
+
+  ## trace each ride of a line x direction along its sequence and load the cells
+  trace_ld <- function(sq, rides) {
+    rides[, `:=`(i = NA_integer_, j = NA_integer_, v = NA_integer_)]
+    for (k in seq_len(nrow(sq))) {
+      s <- strsplit(sq$seq[k], ">", fixed = TRUE)[[1]]; inside <- s %in% city_codes
+      todo <- rides[is.na(i), which = TRUE]; if (!length(todo)) break
+      pi <- match(rides$oc[todo], s)
+      pj <- vapply(seq_along(todo), function(r) {
+        a <- pi[r]; if (is.na(a)) return(NA_integer_)
+        if (is.na(rides$dc[todo[r]])) { w <- which(!inside & seq_along(s) > a); return(if (length(w)) as.integer(w[1]) else NA_integer_) }
+        w <- which(s == rides$dc[todo[r]] & seq_along(s) > a); if (length(w)) as.integer(w[1]) else NA_integer_ }, integer(1))
+      ok <- !is.na(pi) & !is.na(pj)
+      rides[todo[ok], `:=`(i = pi[ok], j = pj[ok], v = k)]
+    }
+    rides <- rides[!is.na(i)]
+    if (!nrow(rides)) return(NULL)
+    rides[, {
+      s <- strsplit(sq$seq[v[1]], ">", fixed = TRUE)[[1]]
+      idx <- unlist(Map(function(a, b) a:(b - 1L), i, j))
+      list(o = rep(o, j - i), d = rep(d, j - i), a = s[idx], b = s[idx + 1L])
+    }, by = v][, v := NULL]
+  }
+  LD <- unique(od[, .(NR_LINI, dir)])
+  traced <- 0
+  CELL <- rbindlist(lapply(seq_len(nrow(LD)), function(r) {
+    sq <- SEQ[NR_LINI == LD$NR_LINI[r] & dir == LD$dir[r]]; if (!nrow(sq)) return(NULL)
+    F <- od[NR_LINI == LD$NR_LINI[r] & dir == LD$dir[r]]
+    S <- trace_ld(sq, unique(F[, .(o, d, oc, dc)])); if (is.null(S)) return(NULL)
+    X <- merge(S, F[, .(o, d, win, period, flow, flow_off, dep, third, osiedle)], by = c("o", "d"), allow.cartesian = TRUE)
+    traced <<- traced + F[paste(o, d) %in% unique(paste(S$o, S$d)), sum(flow)]
+    X[, .(w = sum(flow), ow = sum(flow_off)), by = .(a, b, win, period, o)][, `:=`(NR_LINI = LD$NR_LINI[r], dir = LD$dir[r])]
+  }))
+  cat(sprintf("Assigned riders traced along the network: %.1f%%\n", 100 * traced / od[, sum(flow)]))
+  CELL <- merge(CELL, cc[, .(a = code, X1 = X, Y1 = Y)], by = "a")
+  CELL <- merge(CELL, cc[, .(b = code, X2 = X, Y2 = Y)], by = "b")
+  CELL[, len := sqrt((X2 - X1)^2 + (Y2 - Y1)^2) / 1000]
+  CELL <- CELL[len > 0 & len < 3]
+  CELL[, `:=`(k1 = pmin(a, b), k2 = pmax(a, b), th = atan2(Y2 - Y1, X2 - X1) %% pi,
+              dctr = sqrt(((X1 + X2) / 2 - ctr[1])^2 + ((Y1 + Y2) / 2 - ctr[2])^2) / 1000)]
+  CELL[, `:=`(cell = .GRP), by = .(NR_LINI, dir, a, b, win, period)]
+  CELL[, corr := .GRP, by = .(k1, k2)]
+  CELL[, `:=`(w = w * len, ow = ow * len)]                                  # rider-km
+  saveRDS(CELL[, .(cell, corr, NR_LINI, dir, a, b, k1, k2, win, period, o, w, ow, len, th, dctr, X1, Y1, X2, Y2)],
+          file.path(s2, "segregation_network_cells.rds"))                   # for the benchmark of section 80
+  CELL <- merge(CELL, G[, .(o, dep, third, osiedle)], by = "o")
+  CELL <- CELL[, .(w = sum(w), wd = sum(w * dep), wd2 = sum(w * dep^2), wm = sum(w * (third == "most")), wl = sum(w * (third == "least")),
+                   ow = sum(ow), owd = sum(ow * dep), owd2 = sum(ow * dep^2), owm = sum(ow * (third == "most")), owl = sum(ow * (third == "least")),
+                   th = th[1], dctr = dctr[1], X1 = X1[1], Y1 = Y1[1], X2 = X2[1], Y2 = Y2[1], k1 = k1[1], k2 = k2[1]),
+               by = .(cell, corr, win, period, osiedle)]
+  OS <- sort(unique(CELL$osiedle))
+  CELL[, oi := match(osiedle, OS)]
+
+  ## indices for one layer from cell sums, optionally reweighted by osiedle multiplicities
+  idx <- function(m = rep(1, length(OS)), wn = "weekday", periods = NULL) {
+    T <- if (is.null(periods)) CELL[win == wn] else CELL[win == wn & period %in% periods]
+    mm <- m[T$oi]
+    res <- list()
+    for (L in c("obs", "off")) {
+      p <- if (L == "obs") "" else "o"
+      v <- T[, .(cell, corr, th, dctr, w = get(paste0(p, "w")) * mm, wd = get(paste0(p, "wd")) * mm, wd2 = get(paste0(p, "wd2")) * mm,
+                 wm = get(paste0(p, "wm")) * mm, wl = get(paste0(p, "wl")) * mm)]
+      seg <- function(by) v[, .(w = sum(w), wd = sum(wd), wd2 = sum(wd2), wm = sum(wm), wl = sum(wl)), by = by][w > 0]
+      V <- seg("cell"); K <- v[, .(w = sum(w), wd = sum(wd), wd2 = sum(wd2), wm = sum(wm), wl = sum(wl), th = th[1], dctr = dctr[1]), by = corr][w > 0]
+      W <- sum(V$w); mu <- sum(V$wd) / W; tv <- sum(V$wd2) / W - mu^2
+      eta <- function(S) sum(S$w * (S$wd / S$w - mu)^2) / W / tv
+      Pm <- sum(V$wm) / W; Pl <- sum(V$wl) / W
+      iso <- function(S, g) sum(S[[g]] * S[[g]] / S$w) / sum(S[[g]])
+      exl <- function(S) sum(S$wl * S$wm / S$w) / sum(S$wl)
+      K[, `:=`(sm = wm / sum(wm), sl = wl / sum(wl), ew = abs(cos(th)) >= abs(sin(th)))]
+      ax <- function(g) { x <- K[[g]]; (atan2(sum(x * sin(2 * K$th)), sum(x * cos(2 * K$th))) / 2) * 180 / pi }
+      res[[L]] <- data.table(layer = L, share_most = Pm, share_least = Pl,
+        iso_most_vehicle = iso(V, "wm"), iso_least_vehicle = iso(V, "wl"), exp_least_to_most_vehicle = exl(V),
+        iso_most_corridor = iso(K, "wm"), iso_least_corridor = iso(K, "wl"), exp_least_to_most_corridor = exl(K),
+        eta2_vehicle = eta(V), eta2_corridor = eta(K),
+        overlap_corridor = K[, sum(pmin(sm, sl))], overlap_within2km = K[dctr <= 2, sum(pmin(sm, sl))],
+        overlap_beyond2km = K[dctr > 2, sum(pmin(sm, sl))], most_within2km = K[dctr <= 2, sum(sm)], least_within2km = K[dctr <= 2, sum(sl)],
+        ew_share_most = K[(ew), sum(sm)], ew_share_least = K[(ew), sum(sl)], axis_most = abs(ax("wm")), axis_least = abs(ax("wl")))
+    }
+    rbindlist(res)
+  }
+  WINS <- function(m) rbind(idx(m)[, window := "weekday all day"], idx(m, periods = "am_peak")[, window := "weekday morning peak (06-09)"],
+                            idx(m, "weekend")[, window := "weekend all day"])
+  P0 <- WINS(rep(1, length(OS)))
+  BS <- rbindlist(lapply(seq_len(499), function(b) WINS(tabulate(sample.int(length(OS), replace = TRUE), length(OS)))[, draw := b]))
+  MS <- setdiff(names(P0), c("layer", "window"))
+  LONG <- melt(P0, id.vars = c("layer", "window"), measure.vars = MS, variable.name = "measure", value.name = "est")
+  BL <- melt(BS, id.vars = c("layer", "window", "draw"), measure.vars = MS, variable.name = "measure")
+  CI <- BL[, .(lo = quantile(value, 0.025), hi = quantile(value, 0.975)), by = .(layer, window, measure)]
+  DIF <- dcast(BL, window + measure + draw ~ layer, value.var = "value")[, .(diff_lo = quantile(obs - off, 0.025), diff_hi = quantile(obs - off, 0.975)), by = .(window, measure)]
+  OUT <- merge(merge(LONG, CI, by = c("layer", "window", "measure")), DIF, by = c("window", "measure"))
+  WE <- dcast(BL[window != "weekday morning peak (06-09)"], layer + measure + draw ~ window, value.var = "value")
+  WE <- WE[, .(we_minus_wd_lo = quantile(`weekend all day` - `weekday all day`, 0.025), we_minus_wd_hi = quantile(`weekend all day` - `weekday all day`, 0.975)), by = .(layer, measure)]
+  OUT <- merge(OUT, WE, by = c("layer", "measure"), all.x = TRUE)
+  fwrite(OUT, file.path(s2, "segregation_network.csv"))
+  KC <- CELL[, .(least_obs = sum(wl), most_obs = sum(wm), least_off = sum(owl), most_off = sum(owm), all_obs = sum(w), all_off = sum(ow),
+                 X1 = X1[1], Y1 = Y1[1], X2 = X2[1], Y2 = Y2[1], dctr = dctr[1], th = th[1]), by = .(k1, k2, win)]
+  fwrite(KC, file.path(s2, "segregation_network_corridors.csv"))
+  rd <- function(x) if (is.numeric(x)) round(x, 3) else x
+  cat("\nSegregation on the network, weekday all day (rider-km; 95% bootstrap intervals over the origins' osiedla):\n")
+  print(dcast(OUT[window == "weekday all day"], measure ~ layer, value.var = c("est", "lo", "hi"))[, lapply(.SD, rd)][
+    , .(measure, observed = est_obs, obs_lo = lo_obs, obs_hi = hi_obs, offer = est_off, off_lo = lo_off, off_hi = hi_off)])
+  cat("\nObserved minus offer, 95% interval (weekday all day):\n")
+  print(unique(OUT[window == "weekday all day", .(measure, diff_lo = round(diff_lo, 3), diff_hi = round(diff_hi, 3))]))
+  cat("\nAll windows (estimates):\n")
+  print(dcast(OUT, measure ~ layer + window, value.var = "est")[, lapply(.SD, rd)])
+  cat("\nWeekend minus weekday, observed, 95% interval:\n")
+  print(unique(OUT[layer == "obs", .(measure, we_minus_wd_lo = round(we_minus_wd_lo, 3), we_minus_wd_hi = round(we_minus_wd_hi, 3))]))
+  cat("\nSaved segregation_network.csv, segregation_network_corridors.csv in", round(as.numeric(Sys.time() - t0, units = "mins"), 1), "min\n")
+})
+
+## ── 80 · Benchmark: the same flows with deprivation scattered at random ───────────────────────────────────
+section("80", "Benchmark: the same flows with deprivation scattered at random", {
+  ## Riders boarding the same line near each other always share vehicles and corridors, so part of the sorting
+  ## measured in section 79 is mechanical. The benchmark keeps every traced ride of section 79 (observed flows)
+  ## and re-allocates the 42 osiedle scores at random (999 permutations): each catchment's deprivation shifts by
+  ## the difference between its osiedle's new and old score, and the thirds are recomputed. The indices of
+  ## section 79 are computed for each permutation; the observed geography is compared with this distribution
+  ## (share of permutations at least as segregated). Because the thirds carry different shares of riders under
+  ## each allocation, isolation is also expressed net of group size, (isolation - share) / (1 - share), and
+  ## exposure relative to the share of the other group. Windows: Monday-Thursday and the weekend, all day.
+  ## Section 82 keeps the clustering of deprivation that this benchmark breaks. Indices: R/seg_index.R.
+  ## Inputs: segregation_network_cells.rds (79), gap_stops.rds (56), s1ms_osiedle_profiles.csv (20).
+  ## Output: output/stage2/segregation_benchmark.csv
+
+  suppressPackageStartupMessages({library(data.table); library(Matrix)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/seg_index.R"))
+  s2 <- file.path(out_dir, "output/stage2"); set.seed(80); NB <- 999
+  CE <- readRDS(file.path(s2, "segregation_network_cells.rds"))
+  P <- fread(file.path(out_dir, "output/stage1/s1ms_osiedle_profiles.csv"), encoding = "UTF-8")[, .(osiedle, s = dep)]
+  G <- merge(readRDS(file.path(s2, "gap_stops.rds"))[, .(o = stop_name, dep, third, osiedle)], P, by = "osiedle", all.x = TRUE)
+  if (anyNA(G$s)) stop("catchments without an osiedle score")
+  t0 <- seg_thirds(G$dep)
+  cat(sprintf("Thirds rule reproduces section 56: most %.3f, least %.3f agreement\n", mean(t0$m == (G$third == "most")), mean(t0$l == (G$third == "least"))))
+  OUT <- list()
+  for (wn in c("weekday", "weekend")) {
+    S <- seg_setup(CE, G, wn)
+    obs <- seg_ind(S, G$dep, list(m = as.numeric(G$third == "most"), l = as.numeric(G$third == "least")))
+    PM <- t(replicate(NB, { ns <- setNames(sample(P$s), P$osiedle); seg_ind(S, G$dep + ns[G$osiedle] - G$s) }))
+    OUT[[wn]] <- data.table(window = wn, measure = colnames(PM), observed = obs[colnames(PM)], perm_mean = colMeans(PM),
+                            perm_lo = apply(PM, 2, quantile, 0.025), perm_hi = apply(PM, 2, quantile, 0.975),
+                            p_at_least_as_sorted = seg_p(PM, obs))
+  }
+  OUT <- rbindlist(OUT)
+  fwrite(OUT, file.path(s2, "segregation_benchmark.csv"))
+  print(OUT[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 3) else x)], nrows = 100)
+  cat("Saved segregation_benchmark.csv\n")
+})
+
+## ── 82 · Benchmark: the same deprivation map turned around the centre ──────────────────────────────────────
+section("82", "Benchmark: the same deprivation map turned around the centre", {
+  ## Section 80 scatters the osiedle scores at random, which also breaks the clustering of deprivation and its
+  ## gradient from the centre. This benchmark keeps both and changes only how the map of deprivation lies on the
+  ## network: the map of osiedle scores is turned around the Old Market Square in 15-degree steps (23 rotations)
+  ## and mirrored across 24 axes through it (every 7.5 degrees), 47 transformed maps in all. Each catchment takes
+  ## the score that the transformed map places at its stop (that of the nearest osiedle where the transformed
+  ## location falls outside the city); its deprivation shifts by the difference between this score and the score
+  ## of the osiedle at its own stop, and the thirds are recomputed. The indices of section 79 are compared with
+  ## their values over the 47 maps (share of maps at least as separated). Windows: Monday-Thursday and the
+  ## weekend, all day. Indices: R/seg_index.R.
+  ## Inputs: segregation_network_cells.rds (79), gap_stops.rds (56), s1ms_osiedle_profiles.csv (20),
+  ##         osiedla_42_boundaries.gpkg (01), stop_complexes.gpkg.
+  ## Outputs: output/stage2/segregation_rotation.csv (each map), segregation_rotation_summary.csv,
+  ##          output/figures/Fig_rotation_benchmark.png
+
+  suppressPackageStartupMessages({library(data.table); library(Matrix); library(sf); library(ggplot2)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/seg_index.R")); source(file.path(REPO, "R/map_style.R"))
+  s2 <- file.path(out_dir, "output/stage2"); fig <- file.path(out_dir, "output/figures")
+  CE <- readRDS(file.path(s2, "segregation_network_cells.rds"))
+  G <- readRDS(file.path(s2, "gap_stops.rds"))[, .(o = stop_name, dep, third, osiedle)]
+  TT <- seg_turned(G, out_dir); TR <- TT$TR
+  cat(sprintf("Stops whose own osiedle (by location) is the osiedle of their residents: %.0f%%\n", 100 * TT$own_match))
+  cat(sprintf("Transformed maps: %d; stops whose transformed location lies outside the city: median %.0f%% (max %.0f%%); correlation with the observed map: median %.2f (range %.2f to %.2f)\n",
+              nrow(TR), 100 * median(TR$outside), 100 * max(TR$outside), median(TR$r_observed), min(TR$r_observed), max(TR$r_observed)))
+
+  ALL <- list(); SUM <- list()
+  for (wn in c("weekday", "weekend")) {
+    S <- seg_setup(CE, G, wn)
+    obs <- seg_ind(S, G$dep, list(m = as.numeric(G$third == "most"), l = as.numeric(G$third == "least")))
+    B <- t(vapply(TT$D, function(d) seg_ind(S, d), obs))
+    ALL[[wn]] <- cbind(data.table(window = wn), rbind(data.table(type = "observed", angle = 0, outside = 0, r_observed = 1), TR), as.data.table(rbind(obs, B)))
+    p <- seg_p(B, obs)
+    SUM[[wn]] <- data.table(window = wn, measure = colnames(B), observed = obs[colnames(B)], maps_mean = colMeans(B),
+                            maps_min = apply(B, 2, min), maps_max = apply(B, 2, max), maps = nrow(B),
+                            maps_at_least_as_sorted = round(p * nrow(B)), p_at_least_as_sorted = p)
+  }
+  ALL <- rbindlist(ALL); SUM <- rbindlist(SUM)
+  fwrite(ALL, file.path(s2, "segregation_rotation.csv")); fwrite(SUM, file.path(s2, "segregation_rotation_summary.csv"))
+  print(SUM[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 3) else x)], nrows = 100)
+
+  ## figure: each index over the turned (line) and mirrored (open points) maps, observed map at 0 degrees
+  LB <- c(eta2_corridor = "Variance between corridors", eta2_vehicle = "Variance between lines and segments",
+          niso_most_vehicle = "Isolation of the most deprived third", niso_least_vehicle = "Isolation of the least deprived third",
+          rel_exp_least_to_most_vehicle = "Exposure of the least to the most deprived third", ew_most_minus_least = "West-east share, most minus least deprived third")
+  F <- melt(ALL[window == "weekday"], id.vars = c("window", "type", "angle", "outside", "r_observed"), measure.vars = names(LB), variable.name = "measure")
+  F[, `:=`(lab = factor(LB[as.character(measure)], levels = LB), x = fifelse(type == "mirror", 2 * angle, angle))]
+  RO <- rbind(F[type %in% c("observed", "rotation")], F[type == "observed"][, x := 360])
+  pf <- ggplot(F, aes(x, value)) +
+    geom_hline(data = F[type == "observed"], aes(yintercept = value), colour = MSTY$ink, linewidth = 0.3, linetype = "dashed") +
+    geom_line(data = RO[order(x)], colour = "#8a877f", linewidth = 0.5) +
+    geom_point(data = F[type == "rotation"], colour = "#8a877f", size = 1.5) +
+    geom_point(data = F[type == "mirror"], shape = 21, fill = "#ffffff", colour = "#8a877f", size = 1.6, stroke = 0.5) +
+    geom_point(data = F[type == "observed"], colour = MSTY$ink, size = 2.6) +
+    facet_wrap(~ lab, ncol = 3, scales = "free_y", labeller = label_wrap_gen(30)) +
+    scale_x_continuous(breaks = seq(0, 360, 90), limits = c(0, 360)) +
+    labs(x = "Rotation of the deprivation map (degrees; mirrored maps at twice the angle of their axis)", y = NULL) +
+    theme_minimal(base_size = 9.5) + theme(panel.grid.minor = element_blank(), strip.text = element_text(size = 9, colour = MSTY$ink),
+                                            plot.background = element_rect(fill = "#ffffff", colour = NA))
+  ggsave(file.path(fig, "Fig_rotation_benchmark.png"), pf, width = 10, height = 5.6, dpi = 220, bg = "#ffffff")
+  cat("Saved segregation_rotation.csv, segregation_rotation_summary.csv, Fig_rotation_benchmark.png\n")
+})
+
+## ── 83 · Meeting places: who arrives at the stops ─────────────────────────────────────────────────────────
+section("83", "Meeting places: who arrives at the stops", {
+  ## Do the two streams meet where riders get off? Every estimated ride from the compared catchments (section 56)
+  ## ends at a stop complex, where riders alight to walk on or to change lines. For each complex, the arrivals of
+  ## the least and the most deprived thirds, each scaled to its own total. At two scales, the stop (all periods
+  ## together) and the stop in each period of the day (riders arriving at the same time of day), the indices of
+  ## section 79: overlap of the two thirds' arrivals, isolation net of group size, exposure relative to share and
+  ## the variance ratio of arriving riders' deprivation. Benchmarks as in sections 80 (scores scattered at random,
+  ## 999) and 82 (the map turned or mirrored, 47). Stops are typed as the centre (within 1.5 km of the Old Market
+  ## Square), interchanges (12 or more lines), terminals and the rest. Windows: Monday-Thursday and the weekend,
+  ## all day, March-June and October.
+  ## Inputs: od flows (40, 41), gap_stops.rds (56), s1ms_osiedle_profiles.csv (20), catchment_covariates_network.csv,
+  ##         stop_complexes.gpkg, hub_use.csv (offered arrivals at the interchanges).
+  ## Outputs: output/stage2/meeting_stops.csv, meeting_benchmark.csv, meeting_types.csv;
+  ##          output/figures/Fig_meeting_places.png
+
+  suppressPackageStartupMessages({library(data.table); library(Matrix); library(sf); library(ggplot2); library(patchwork); library(ggrepel)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/od_expand.R")); source(file.path(REPO, "R/seg_index.R")); source(file.path(REPO, "R/map_style.R"))
+  s2 <- file.path(out_dir, "output/stage2"); fig <- file.path(out_dir, "output/figures"); set.seed(83); NB <- 999
+  MON <- c(3:6, 10)
+  G <- readRDS(file.path(s2, "gap_stops.rds"))[, .(o = stop_name, dep, third, osiedle)]
+  P <- fread(file.path(out_dir, "output/stage1/s1ms_osiedle_profiles.csv"), encoding = "UTF-8")[, .(osiedle, s = dep)]
+  G[, s := P$s[match(osiedle, P$osiedle)]]
+  od <- rbindlist(lapply(sprintf("%02d", MON), function(m) expand_od(readRDS(file.path(s2, "od", sprintf("od_2025_%s.rds", m))))[
+    daytype %in% c("monthu", "sat", "sunhol") & o %in% G$o & d != "outside", .(flow = sum(flow)),
+    by = .(o, d, win = fifelse(daytype == "monthu", "weekday", "weekend"), period)]))
+  od <- od[, .(flow = sum(flow)), by = .(o, d, win, period)]
+  C <- st_read(file.path(s2, "stop_complexes.gpkg"), "complexes", quiet = TRUE)
+  ctr <- st_coordinates(st_transform(st_sfc(st_point(c(16.9335, 52.4083)), crs = 4326), st_crs(C)))[1, ]
+  XY <- data.table(d = C$stop_name, X = st_coordinates(C)[, 1], Y = st_coordinates(C)[, 2], lines = C$lines)[, dctr := sqrt((X - ctr[1])^2 + (Y - ctr[2])^2) / 1000]
+  cv <- fread(file.path(s2, "catchment_covariates_network.csv"), encoding = "UTF-8")[, .(d = stop_name, terminal = as.logical(terminal), interchange = as.logical(interchange))]
+  XY <- merge(XY, cv, by = "d", all.x = TRUE)
+  XY[, type := fcase(dctr <= 1.5, "centre", lines >= 12 | interchange %in% TRUE, "interchange", terminal %in% TRUE, "terminal", default = "other")]
+  cat(sprintf("Destination complexes without flags in the covariates: %d of %d\n", sum(is.na(XY$interchange)), nrow(XY)))
+  TT <- seg_turned(G, out_dir)
+  tt0 <- list(m = as.numeric(G$third == "most"), l = as.numeric(G$third == "least"))
+  idx <- function(S, d, tt = seg_thirds(d)) {                              # the indices of section 79 for arrivals
+    x <- seg_ind(S, d, tt); x <- x[!grepl("^ew_", names(x))]
+    names(x) <- sub("_corridor$", "_stop", sub("_vehicle$", "_stop_period", names(x))); x
+  }
+  OUT <- list(); STOPS <- list()
+  for (wn in c("weekday", "weekend")) {
+    E <- od[win == wn]
+    dl <- sort(unique(E$d))
+    if (!all(dl %in% XY$d)) stop("destinations without a location")
+    E[, `:=`(vi = match(paste(d, period), unique(paste(d, period))), ci = match(d, dl), oi = match(o, G$o))]
+    S <- list(Mv = sparseMatrix(i = E$vi, j = E$oi, x = E$flow, dims = c(max(E$vi), nrow(G))),
+              Mc = sparseMatrix(i = E$ci, j = E$oi, x = E$flow, dims = c(length(dl), nrow(G))))
+    S$vw <- rowSums(S$Mv); S$cw <- rowSums(S$Mc); S$ew <- rep(FALSE, length(dl)); S$inner <- XY$dctr[match(dl, XY$d)] <= 2
+    obs <- idx(S, G$dep, tt0)
+    PM <- t(replicate(NB, { ns <- setNames(sample(P$s), P$osiedle); idx(S, G$dep + ns[G$osiedle] - G$s) }))
+    B <- t(vapply(TT$D, function(d) idx(S, d), obs))
+    OUT[[wn]] <- data.table(window = wn, measure = names(obs), observed = obs, perm_mean = colMeans(PM), perm_lo = apply(PM, 2, quantile, 0.025),
+                            perm_hi = apply(PM, 2, quantile, 0.975), p_scattered = seg_p(PM, obs), maps_mean = colMeans(B), maps_min = apply(B, 2, min),
+                            maps_max = apply(B, 2, max), maps_as_separated = round(seg_p(B, obs) * nrow(B)), maps = nrow(B))
+    A <- data.table(d = dl, most = as.vector(S$Mc %*% tt0$m), least = as.vector(S$Mc %*% tt0$l), known = S$cw)
+    A[, `:=`(sm = most / sum(most), sl = least / sum(least))][, `:=`(comp = sm / (sm + sl), wd = (sm + sl) / 2, window = wn)]
+    STOPS[[wn]] <- merge(A, XY, by = "d")
+  }
+  OUT <- rbindlist(OUT); STOPS <- rbindlist(STOPS)
+  TY <- STOPS[, .(stops = .N, share_of_most = sum(sm), share_of_least = sum(sl), shared = sum(pmin(sm, sl))), by = .(window, type)]
+  TY[, shared_part := shared / sum(shared), by = window]
+  HU <- fread(file.path(s2, "hub_use.csv"), encoding = "UTF-8")[, .(d, off_least = net_share_least / 100, off_most = net_share_most / 100)]
+  STOPS <- merge(STOPS, HU, by = "d", all.x = TRUE)
+  fwrite(STOPS, file.path(s2, "meeting_stops.csv")); fwrite(OUT, file.path(s2, "meeting_benchmark.csv")); fwrite(TY, file.path(s2, "meeting_types.csv"))
+  print(OUT[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 3) else x)], nrows = 100)
+  print(TY[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 3) else x)])
+  cat("\nThe 30 stops with most arrivals (mean of the two thirds' scaled shares), weekdays:\n")
+  print(STOPS[window == "weekday"][order(-wd)][1:30, .(d, type, lines, dctr = round(dctr, 1), most_pct = round(100 * sm, 1), least_pct = round(100 * sl, 1),
+                                                     comp = round(comp, 2), off_most_pct = round(100 * off_most, 1), off_least_pct = round(100 * off_least, 1))])
+
+  ## figure: (a) meeting places on the map; (b) the 24 stops with most arrivals, share of each third's arrivals
+  L <- ms_layers(out_dir)
+  W <- STOPS[window == "weekday" & wd >= 0.0015]
+  ZB <- W[, .(x0 = min(X) - 1500, x1 = max(X) + 1500, y0 = min(Y) - 1500, y1 = max(Y) + 1500)]
+  Lz <- L; Lz$bbox <- st_bbox(c(xmin = ZB$x0, ymin = ZB$y0, xmax = ZB$x1, ymax = ZB$y1), crs = st_crs(2180))
+  TOP <- STOPS[window == "weekday"][order(-wd)][1:24]
+  pa <- ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
+    geom_point(data = W[order(-wd)], aes(X, Y, size = wd, fill = comp), shape = 21, colour = "#ffffff", stroke = 0.4) +
+    geom_text_repel(data = TOP[1:12], aes(X, Y, label = d), size = 3.1, colour = MSTY$ink, bg.colour = "#ffffff", bg.r = 0.12, min.segment.length = 0, segment.size = 0.25,
+                    box.padding = 0.35, max.overlaps = 30, seed = 83) +
+    scale_fill_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), breaks = c(0, 0.5, 1),
+                         labels = c("least deprived", "both", "most deprived"), name = "Arrivals mainly from the") +
+    scale_size_area(max_size = 9, guide = "none") + ms_centre(L) + ms_scalebar(Lz) +
+    coord_sf(datum = NA, expand = FALSE, xlim = c(ZB$x0, ZB$x1), ylim = c(ZB$y0, ZB$y1)) +
+    labs(title = "Getting off, weekdays") + theme_ms(10.5)
+  TOP[, lab := factor(paste0(d, "  · ", type), levels = paste0(d, "  · ", type)[order(comp)])]
+  TL <- melt(TOP[, .(lab, least = 100 * sl, most = 100 * sm)], id.vars = "lab", variable.name = "group", value.name = "pct")
+  pb <- ggplot(TOP) + geom_segment(aes(x = 100 * sl, xend = 100 * sm, y = lab, yend = lab), colour = "#c9c6bf", linewidth = 0.6) +
+    geom_point(data = TL, aes(pct, lab, colour = group), size = 2.3) +
+    scale_colour_manual(values = c(least = MSTY$least, most = MSTY$most), labels = c("least deprived third", "most deprived third"), name = NULL) +
+    labs(title = "Share of each third's arrivals (%)", x = NULL, y = NULL) +
+    theme_minimal(base_size = 9.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), legend.position = "bottom",
+                                            axis.text.y = element_text(size = 7.8, colour = MSTY$ink), plot.title = element_text(size = 9.5, hjust = 0.5, colour = MSTY$ink),
+                                            plot.background = element_rect(fill = "#ffffff", colour = NA))
+  g <- (pa | pb) + plot_layout(widths = c(1.25, 1)) + plot_annotation(tag_levels = "a") & theme(plot.tag = element_text(face = "bold", size = 11.5))
+  ggsave(file.path(fig, "Fig_meeting_places.png"), g, width = 12, height = 7, dpi = 220, bg = "#ffffff")
+  cat("Saved meeting_stops.csv, meeting_benchmark.csv, meeting_types.csv, Fig_meeting_places.png\n")
+})
+
+## ── 81 · Map: two streams on the network ───────────────────────────────────────────────────────────────────
+section("81", "Map: two streams on the network", {
+  ## Figure 8. (a) Riding: corridors (undirected stop-to-stop segments) coloured by which group rides them; each
+  ## third's ride-km is scaled to its own total, and the colour is the most deprived third's part of the two scaled
+  ## shares (blue: mainly the least deprived third; red: the most deprived third; grey: both in proportion); width:
+  ## the mean of the two scaled shares. (b) Getting off (section 83): each complex coloured in the same way by the
+  ## two thirds' arrivals and sized by the mean of their scaled shares. (c) Axial roses: each group's weekday ride-km
+  ## by compass direction of the segments (15-degree sectors, drawn symmetrically).
+  ## Figure 9: the indices on the lines (section 79) and where riders get off (section 83) against the same flows
+  ## with the scores scattered at random (sections 80, 83) and with the map turned or mirrored (sections 82, 83).
+  ## The weekday offer and the weekend look almost the same as (a); they are drawn in a separate figure.
+  ## Inputs: segregation_network_corridors.csv (79), segregation_benchmark.csv (80), segregation_rotation_summary.csv (82),
+  ##         meeting_stops.csv, meeting_benchmark.csv (83).
+  ## Outputs: output/figures/Fig_two_streams.png, Fig_sharing_benchmark.png, Fig_two_streams_offer_weekend.png
+
+  suppressPackageStartupMessages({library(data.table); library(sf); library(ggplot2); library(patchwork); library(ggrepel)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/map_style.R"))
+  s2 <- file.path(out_dir, "output/stage2"); fig <- file.path(out_dir, "output/figures")
+  L <- ms_layers(out_dir)
+  KC <- fread(file.path(s2, "segregation_network_corridors.csv"), encoding = "UTF-8")
+  panel <- function(wn, layer) {
+    d <- KC[win == wn, .(X1, Y1, X2, Y2, th, m = get(paste0("most_", layer)), l = get(paste0("least_", layer)))]
+    d[, `:=`(sm = m / sum(m), sl = l / sum(l))][, `:=`(comp = sm / (sm + sl), wd = (sm + sl) / 2)]
+    d[wd > 0]
+  }
+  P <- list(a = panel("weekday", "obs"), b = panel("weekday", "off"), c = panel("weekend", "obs"))
+  mx <- quantile(unlist(lapply(P, `[[`, "wd")), 0.995); mn <- 0.0008
+  ZB <- rbindlist(P)[wd >= mn, .(x0 = min(pmin(X1, X2)) - 1200, x1 = max(pmax(X1, X2)) + 1200, y0 = min(pmin(Y1, Y2)) - 1200, y1 = max(pmax(Y1, Y2)) + 1200)]
+  zoom <- coord_sf(datum = NA, expand = FALSE, xlim = c(ZB$x0, ZB$x1), ylim = c(ZB$y0, ZB$y1))
+  Lz <- L; Lz$bbox <- st_bbox(c(xmin = ZB$x0, ymin = ZB$y0, xmax = ZB$x1, ymax = ZB$y1), crs = st_crs(2180))
+  LAB <- c("Piątkowo", "Winogrady", "Jeżyce", "Ogrody", "Łazarz", "Wilda", "Rataje", "Chartowo", "Śródka", "Górczyn")
+  COMP <- scale_colour_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), breaks = c(0, 0.5, 1),
+                                 labels = c("least deprived", "both", "most deprived"), name = "Ridden or reached mainly by riders from the")
+  mp <- function(d, title) {
+    ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
+      geom_segment(data = d[wd >= mn][order(wd)], aes(X1, Y1, xend = X2, yend = Y2, colour = comp, linewidth = pmin(wd, mx)), lineend = "round") +
+      COMP + scale_linewidth(range = c(0.15, 2.8), limits = c(mn, mx), guide = "none") +
+      ms_labels(L, LAB, size = 3.3) + ms_centre(L) + zoom + labs(title = title) + theme_ms(10.5)
+  }
+  pa <- mp(P$a, "Riding") + ms_scalebar(Lz)
+  pb <- mp(P$b, "Offered, weekdays") + ms_scalebar(Lz)
+  pc <- mp(P$c, "Riding, weekends")
+  ## (b) getting off: weekday arrivals at each complex
+  MS <- fread(file.path(s2, "meeting_stops.csv"), encoding = "UTF-8")[window == "weekday" & wd >= 0.0015]
+  pm <- ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
+    geom_point(data = MS[order(-wd)], aes(X, Y, size = wd, fill = comp), shape = 21, colour = "#ffffff", stroke = 0.4) +
+    geom_text_repel(data = MS[order(-wd)][1:12], aes(X, Y, label = d), size = 3.1, colour = MSTY$ink, bg.colour = "#ffffff", bg.r = 0.12, min.segment.length = 0, segment.size = 0.25,
+                    box.padding = 0.35, max.overlaps = 30, seed = 83) +
+    scale_fill_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), guide = "none") +
+    scale_size_area(max_size = 8, guide = "none") + ms_centre(L) + zoom + labs(title = "Getting off") + theme_ms(10.5)
+  ## (c) axial roses: compass bearing of each segment (0 = north-south, 90 = east-west), weekday ride-km shares
+  R <- KC[win == "weekday", .(th, most = most_obs / sum(most_obs), least = least_obs / sum(least_obs))]
+  R[, brg := ((90 - th * 180 / pi) %% 180)]
+  R[, bin := floor(brg / 15) * 15 + 7.5]
+  RB <- melt(R[, .(most = sum(most), least = sum(least)), by = bin], id.vars = "bin", variable.name = "group", value.name = "share")
+  RB <- rbind(RB, copy(RB)[, bin := bin + 180])
+  RB[, group := factor(group, levels = c("least", "most"), labels = c("Least deprived third", "Most deprived third"))]
+  pd <- ggplot(RB, aes(bin, share, fill = group)) + geom_col(width = 15, colour = "#ffffff", linewidth = 0.2) + facet_wrap(~ group, ncol = 2) +
+    coord_polar(start = 0, direction = 1) + scale_x_continuous(limits = c(0, 360), breaks = c(0, 90, 180, 270), labels = c("N", "E", "S", "W")) +
+    scale_fill_manual(values = c("Least deprived third" = MSTY$least, "Most deprived third" = MSTY$most), guide = "none") +
+    labs(title = "Direction of ride-km", x = NULL, y = NULL) +
+    theme_minimal(base_size = 10.5) + theme(axis.text.y = element_blank(), panel.grid.minor = element_blank(), strip.text = element_text(size = 10, colour = MSTY$ink),
+                                            plot.title = element_text(size = 10.5, hjust = 0.5, colour = MSTY$ink), plot.background = element_rect(fill = "#ffffff", colour = NA))
+  ## (d) benchmarks (weekdays): scattered scores (95% of 999 allocations) and turned or mirrored maps (all 47)
+  LBL <- data.table(block = c(rep("lines", 7), rep("stops", 4)),
+                    measure = c("overlap_corridor", "eta2_corridor", "eta2_vehicle", "niso_most_vehicle", "niso_least_vehicle", "rel_exp_least_to_most_vehicle",
+                                "ew_most_minus_least", "overlap_stop", "niso_most_stop_period", "niso_least_stop_period", "rel_exp_least_to_most_stop_period"),
+                    lab = c("Overlap of the two thirds' ride-km", "Variance between corridors", "Variance between lines and segments",
+                            "Isolation of the most deprived third", "Isolation of the least deprived third",
+                            "Exposure of the least to the most deprived\nthird, relative to its share", "West-east share, most minus\nleast deprived third",
+                            "Overlap of the two thirds' arrivals", "Isolation of the most deprived third", "Isolation of the least deprived third",
+                            "Exposure of the least to the most deprived\nthird, relative to its share"),
+                    y = c(13:7, 4:1))
+  LN <- merge(fread(file.path(s2, "segregation_benchmark.csv"))[window == "weekday", .(measure, observed, s_mean = perm_mean, s_lo = perm_lo, s_hi = perm_hi, p = p_at_least_as_sorted)],
+              fread(file.path(s2, "segregation_rotation_summary.csv"))[window == "weekday", .(measure, t_mean = maps_mean, t_min = maps_min, t_max = maps_max, k = maps_at_least_as_sorted, n = maps)],
+              by = "measure")[, block := "lines"]
+  ST <- fread(file.path(s2, "meeting_benchmark.csv"))[window == "weekday", .(measure, observed, s_mean = perm_mean, s_lo = perm_lo, s_hi = perm_hi, p = p_scattered,
+                                                                            t_mean = maps_mean, t_min = maps_min, t_max = maps_max, k = maps_as_separated, n = maps)][, block := "stops"]
+  BB <- merge(LBL, rbind(LN, ST), by = c("block", "measure"))
+  if (nrow(BB) != nrow(LBL)) stop("benchmark measures missing")
+  BB[, `:=`(ptxt = fifelse(p == 0, "< 0.001", sprintf(fifelse(p < 0.01, "%.3f", "%.2f"), p)), ktxt = sprintf("%d of %d", k, n))]
+  dy <- 0.17; xp <- 1.04; xk <- 1.24
+  pe <- ggplot(BB) +
+    geom_vline(xintercept = 0, colour = "#bdbab2", linewidth = 0.3) +
+    geom_segment(aes(x = s_lo, xend = s_hi, y = y + dy, yend = y + dy), linewidth = 2.6, colour = "#dcdad3", lineend = "round") +
+    geom_segment(aes(x = t_min, xend = t_max, y = y - dy, yend = y - dy), linewidth = 2.6, colour = "#b3b0a8", lineend = "round") +
+    geom_point(aes(s_mean, y + dy), shape = 21, size = 1.9, fill = "#ffffff", colour = "#8a877f", stroke = 0.6) +
+    geom_point(aes(t_mean, y - dy), shape = 21, size = 1.9, fill = "#ffffff", colour = "#6f6c65", stroke = 0.6) +
+    geom_segment(aes(x = observed, xend = observed, y = y - 0.34, yend = y + 0.34), colour = MSTY$ink, linewidth = 1) +
+    geom_text(aes(x = xp, y = y, label = ptxt), hjust = 0, size = 2.8, colour = MSTY$ink) +
+    geom_text(aes(x = xk, y = y, label = ktxt), hjust = 0, size = 2.8, colour = MSTY$ink) +
+    annotate("text", x = -0.22, y = c(14.15, 5.15), label = c("On the lines", "Where riders get off"), hjust = 0, size = 3.1, fontface = "bold", colour = MSTY$ink) +
+    annotate("text", x = c(xp, xk), y = 14.15, label = c("p,\nscattered", "turned maps\nas separated"), hjust = 0, size = 2.6, colour = "#5f5c55", lineheight = 0.9) +
+    scale_x_continuous(limits = c(-0.22, 1.5), breaks = seq(-0.2, 1, 0.2)) +
+    scale_y_continuous(breaks = BB$y, labels = BB$lab, limits = c(0.5, 14.7), expand = c(0, 0)) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 9.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), axis.text.y = element_text(size = 8.6, colour = MSTY$ink),
+                                            plot.background = element_rect(fill = "#ffffff", colour = NA))
+  tg <- theme(plot.tag = element_text(face = "bold", size = 11.5))
+  maps <- (pa + labs(tag = "a") + tg | pm + labs(tag = "b") + tg) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+  g <- wrap_elements(full = maps) / wrap_elements(full = pd + labs(tag = "c") + tg) + plot_layout(heights = c(1.75, 0.72))
+  ggsave(file.path(fig, "Fig_two_streams.png"), g, width = 9.4, height = 9.3, dpi = 270, bg = "#ffffff")
+  ggsave(file.path(fig, "Fig_sharing_benchmark.png"), pe, width = 7.2, height = 5.9, dpi = 260, bg = "#ffffff")
+  g2 <- (pb | pc) + plot_annotation(tag_levels = "a") + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+  ggsave(file.path(fig, "Fig_two_streams_offer_weekend.png"), g2, width = 11, height = 6.6, dpi = 220, bg = "#ffffff")
+  cat("Saved Fig_two_streams.png, Fig_sharing_benchmark.png, Fig_two_streams_offer_weekend.png\n")
 })
