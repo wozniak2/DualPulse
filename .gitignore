@@ -1,0 +1,28 @@
+# local paths
+config_local.R
+
+# data: only the small public inputs listed below are tracked
+data/*
+!data/README.md
+!data/gpr_indicators_ABC_osiedla.csv
+!data/diagnoza2016_osiedla_ground_truth.csv
+!data/diagnoza2019_osiedla_ground_truth.csv
+!data/diagnoza2021_osiedla_ground_truth.csv
+!data/raw/
+data/raw/*
+# the saved ZKZL web page embeds the site's Google Maps key, so it is not tracked (data/raw/* already excludes it)
+!data/raw/spp/
+!data/raw/weather/
+data/raw/weather/*.zip
+
+# results and external folders (written when ROOT is the repository)
+output/
+manuscript/
+peka/
+peka_raw/
+logs/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/

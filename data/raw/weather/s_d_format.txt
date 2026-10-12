@@ -1,0 +1,69 @@
+
+NSP    Kod stacji
+POST   Nazwa stacji
+ROK    Rok
+MC     Miesi¹c
+DZ     Dzieñ
+TMAX   Maksymalna dobowa temperatura powietrza [°C]
+WTMAX  Status pomiaru TMAX
+TMIN   Minimalna dobowa temperatura powietrza [°C]
+WTMIN  Status pomiaru TMIN
+STD    Œrednia dobowa temperatura powietrza [°C]
+WSTD   Status pomiaru STD
+TMNG   Minimalna dobowa temperatura powietrza przy gruncie [°C]     
+WTMNG  Status pomiaru TMNG
+SMDB   Suma dobowa opadu [mm]
+WSMDB  Status pomiaru SMDB
+ROOP   Rodzaj opadu [S/W/ ]
+PKSN   Wysokoœæ pokrywy œnie¿nej [cm]
+WPKSN  Status pomiaru PKSN
+RWSN   Równowa¿nik wodny œniegu [mm/cm]
+WRWSN  Status pomiaru RWSN
+USL    Us³onecznienie [godziny]
+WUSL   Status pomiaru USL
+DESZ   Czas trwania opadu deszczu [godziny]
+WDESZ  Status pomiaru DESZ
+SNEG   Czas trwania opadu œniegu [godziny]
+WSNEG  Status pomiaru SNEG
+DISN   Czas trwania opadu deszczu ze œniegiem [godziny]
+WDISN  Status pomiaru DISN
+GRAD   Czas trwania gradu [godziny]
+WGRAD  Status pomiaru GRAD
+MGLA   Czas trwania mg³y [godziny]
+WMGLA  Status pomiaru MGLA
+ZMGL   Czas trwania zamglenia [godziny]
+WZMGL  Status pomiaru ZMGL
+SADZ   Czas trwania sadzi [godziny]
+WSADZ  Status pomiaru SADZ
+GOLO   Czas trwania go³oledzi [godziny]
+WGOLO  Status pomiaru GOLO
+ZMNI   Czas trwania zamieci œnie¿nej niskiej [godziny]
+WZMNI  Status pomiaru ZMNI
+ZMWS   Czas trwania zamieci œnie¿nej wysokiej [godziny]
+WZMWS  Status pomiaru ZMWS
+ZMET   Czas trwania zmêtnienia [godziny]
+WZMET  Status pomiaru ZMET
+FF10   Czas trwania wiatru >=10m/s [godziny]
+WFF10  Status pomiaru FF10
+FF15   Czas trwania wiatru >15m/s [godziny]
+WFF15  Status pomiaru FF15
+BRZA   Czas trwania burzy [godziny]
+WBRZA  Status pomiaru BRZA
+ROSA   Czas trwania rosy [godziny]
+WROSA  Status pomiaru ROSA
+SZRO   Czas trwania szronu [godziny]
+WSZRO  Status pomiaru SZRO
+DZPS   Wyst¹pienie pokrywy œnie¿nej  [0/1]
+WDZPS  Status pomiaru DZPS
+DZBL   Wyst¹pienie b³yskawicy  [0/1]
+WDZBL  Status pomiaru DZBL
+SGR    Stan gruntu [Z/R]
+IZD    Izoterma dolna [cm]
+WIZD   Status pomiaru IZD
+IZG    Izoterma górna [cm]
+WIZG   Status pomiaru IZG
+AKTN   Aktynometria  [J/cm2]
+WAKTN  Status pomiaru AKTN
+
+Status "8" brak pomiaru
+Status "9" brak zjawiska

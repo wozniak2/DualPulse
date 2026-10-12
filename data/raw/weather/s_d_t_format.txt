@@ -1,0 +1,27 @@
+
+NSP    Kod stacji
+POST   Nazwa stacji
+ROK    Rok
+MC     Miesi¹c
+DZ     Dzieñ
+NOS    Œrednie dobowe zachmurzenie ogólne [oktanty]
+WNOS   Status pomiaru NOS
+FWS    Œrednia dobowa prêdkoœæ wiatru [m/s]
+WFWS   Status pomiaru FWS
+TEMP   Œrednia dobowa temperatura powietrza [°C]
+WTEMP  Status pomiaru TEMP
+CPW    Œrednie dobowe ciœnienie pary wodnej [hPa]
+WCPW   Status pomiaru CPW
+WLGS   Œrednia dobowa wilgotnoœæ wzglêdna [%]
+WWLGS  Status pomiaru WLGS
+PPPS   Œrednie dobowe ciœnienie na poziomie stacji [hPa]
+WPPPS  Status pomiaru PPPS
+PPPM   Œrednie dobowe ciœnienie na poziomie morza [hPa]
+WPPPM  Status pomiaru PPPM
+WODZ   Suma opadu dzieñ [mm]
+WWODZ  Status pomiaru WODZ                                 
+WONO   Suma opadu noc [mm]
+WWONO  Status pomiaru WONO
+
+Status "8" brak pomiaru
+Status "9" brak zjawiska
