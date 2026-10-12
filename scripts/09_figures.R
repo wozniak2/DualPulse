@@ -105,6 +105,9 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
     clip <- function(x) suppressWarnings(st_intersection(x, win))
     vw <- clip(vc); o <- clip(osi)
     ol <- suppressWarnings(st_point_on_surface(o)); ol <- ol[as.numeric(st_area(o))[match(ol$name, o$name)] > lab_min, ]
+    xy <- st_coordinates(ol); bb <- st_bbox(win); m <- 330                # keep osiedle names inside the window
+    xy[, 1] <- pmin(pmax(xy[, 1], bb[["xmin"]] + m), bb[["xmax"]] - m); xy[, 2] <- pmin(pmax(xy[, 2], bb[["ymin"]] + m), bb[["ymax"]] - m)
+    st_geometry(ol) <- st_sfc(lapply(seq_len(nrow(xy)), function(i) st_point(xy[i, 1:2])), crs = st_crs(ol))
     W <- list(win = win, b = st_bbox(win), line = st_cast(st_geometry(win), "LINESTRING"), ways = clip(w0[lengths(st_intersects(w0, win)) > 0]),
               osi = clip(osi_lines), vc = vw, poles = poles[lengths(st_intersects(poles, win)) > 0, ], pp = pp[lengths(st_intersects(pp, win)) > 0, ],
               lab = suppressWarnings(st_point_on_surface(vw[!is.na(vw$cdep) & as.numeric(st_area(vw)) > 4e4, ])), os_lab = ol,
@@ -136,7 +139,8 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   zoom <- function(W, p) p + coord_sf(xlim = W$b[c(1, 3)], ylim = W$b[c(2, 4)], expand = FALSE, datum = NA) +
     theme(panel.border = element_rect(fill = NA, colour = ink, linewidth = 0.5))
   os_lines <- function(W) geom_sf(data = W$osi, colour = ink, linewidth = 0.55, linetype = "22")
-  os_names <- function(W) geom_sf_text(data = W$os_lab, aes(label = gsub(" ", "\n", name)), size = 2.1, colour = ink, lineheight = 0.85, fontface = "italic")
+  os_names <- function(W, size = 2.1) geom_sf_label(data = W$os_lab, aes(label = gsub(" ", "\n", name)), size = size, colour = ink, lineheight = 0.85, fontface = "italic",
+                                                     fill = "#ffffff", alpha = 0.75, linewidth = 0, label.padding = unit(0.06, "lines"))
   pole_pts <- function(W) list(geom_sf(data = W$poles, aes(shape = "Stops (poles in b and d, complexes in e)"), fill = ink, colour = "#ffffff", size = 1.5, stroke = 0.4),
                                scale_shape_manual(values = c("Stops (poles in b and d, complexes in e)" = 21), name = NULL))
   p_net <- function(W) zoom(W, ggplot() + geom_sf(data = W$ways, colour = "#8f8d86", linewidth = 0.22) + os_lines(W) + pole_pts(W) + os_names(W) +
@@ -147,11 +151,11 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   p_res <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, fill = "#f6f5f2", colour = "#c9c7c0", linewidth = 0.3) + os_lines(W) +
     geom_sf(data = W$pp[order(W$pp$pop), ], aes(size = pop, fill = dep), colour = "#9d9b94", stroke = 0.15, shape = 21) + sscale + dscale +
     labs(subtitle = "Residents, coloured by their osiedle's score") + mth)
-  p_cdep <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = cdep), colour = "#ffffff", linewidth = 0.5) + dscale + os_lines(W) + pole_pts(W) +
-    geom_sf_label(data = W$lab, aes(label = fmt1(cdep)), size = 2, colour = ink, fill = "#ffffff", alpha = 0.8, linewidth = 0, label.padding = unit(0.08, "lines")) +
+  p_cdep <- function(W, lab = 2) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = cdep), colour = "#ffffff", linewidth = 0.5) + dscale + os_lines(W) + pole_pts(W) +
+    geom_sf_label(data = W$lab, aes(label = fmt1(cdep)), size = lab, colour = ink, fill = "#ffffff", alpha = 0.8, linewidth = 0, label.padding = unit(0.08, "lines")) +
     labs(subtitle = "Catchment deprivation: residents' mean") + mth)
-  p_muni <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = muni_share), colour = "#ffffff", linewidth = 0.5) + mscale + os_lines(W) +
-    geom_sf(data = W$mb, aes(size = pop), shape = 22, fill = ink, colour = "#ffffff", stroke = 0.2) + scale_size_area(max_size = 2.4, guide = "none") + os_names(W) +
+  p_muni <- function(W, lab = 2.1) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = muni_share), colour = "#ffffff", linewidth = 0.5) + mscale + os_lines(W) +
+    geom_sf(data = W$mb, aes(size = pop), shape = 22, fill = ink, colour = "#ffffff", stroke = 0.2) + scale_size_area(max_size = 2.4, guide = "none") + os_names(W, lab) +
     labs(subtitle = "Municipal share of catchment residents") + mth)
   all_stops <- function() ggplot() + geom_sf(data = city, fill = "#f3f2ee", colour = "#c3c2b7", linewidth = 0.3) +
     geom_sf(data = vc[!is.na(vc$cdep), ], aes(fill = cdep), colour = NA) + geom_sf(data = vc[is.na(vc$cdep), ], fill = "#c9c7c0", colour = NA) +
@@ -187,19 +191,20 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
 
   ## main version, six panels, one window (W3) for every zoomed panel, marked in a and e
   mark <- list(geom_sf(data = W3$line, colour = ink, linewidth = 0.5),
-               annotate("label", x = W3$b[["xmax"]] + 250, y = W3$b[["ymax"]], label = "b–d, f", hjust = 0, vjust = 1, size = 2.6, colour = ink, fill = "#ffffff",
+               annotate("label", x = W3$b[["xmax"]] + 250, y = W3$b[["ymax"]], label = "b–d, f", hjust = 0, vjust = 1, size = 3.3, colour = ink, fill = "#ffffff",
                         linewidth = 0, label.padding = unit(0.1, "lines")))
   qa <- city_map("dep", "Deprivation score by osiedle") + mark
-  qb <- p_catch(W3) + os_names(W3) + labs(subtitle = "Walking catchments on the pedestrian network")
+  qb <- p_catch(W3) + os_names(W3, 3.1) + labs(subtitle = "Walking catchments on the pedestrian network")
   qc <- p_res(W3) + scale_size_area(max_size = 4.6, limits = c(0, max(pp$pop)), breaks = c(10, 100, 500), name = "Residents per address (c)",
                                     guide = guide_legend(title.position = "top", override.aes = list(fill = "#8f8d86")))
-  qd <- p_cdep(W3)
+  qd <- p_cdep(W3, 2.9)
   qe <- all_stops() + mark + geom_sf(data = st_centroid(st_geometry(C)), colour = ink, size = 0.35, stroke = 0, shape = 16, alpha = 0.8) +
     labs(subtitle = "Catchment deprivation of every stop") + mth
-  qf <- p_muni(W3)
+  qf <- p_muni(W3, 3.1)
   f6 <- (qa + qb + qc) / (qd + qe + qf) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
-    theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA))
-  ggsave(file.path(fig, "Fig_construction.png"), f6, width = 11, height = 8.4, dpi = 300, bg = surf)
+    theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA), plot.subtitle = element_text(colour = ink, size = 10.5, hjust = 0.5, margin = margin(b = 3)),
+          legend.title = element_text(colour = ink, size = 10), legend.text = element_text(colour = ink2, size = 9.5), plot.tag = element_text(face = "bold", size = 12))
+  ggsave(file.path(fig, "Fig_construction.png"), f6, width = 10, height = 7.9, dpi = 300, bg = surf)
   file.copy(file.path(fig, c("Fig_construction.png", "Fig_construction_full.png")), ms_fig, overwrite = TRUE)
   cat("Saved Fig_construction.png (six panels) and Fig_construction_full.png (twelve panels)\n")
 })
