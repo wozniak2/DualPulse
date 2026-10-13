@@ -46,16 +46,14 @@ Usage combines what the network offers at a stop with the use riders make of it.
 
 | | |
 |:---:|:---:|
-| ![Construction](figures/Fig_construction.png) | ![Deprived areas](figures/Fig_deprived_areas_map.png) |
-| **Figure 2.** How deprivation is assigned to stop catchments: osiedle score; in one window where four osiedla meet, walking catchments, residents, catchment deprivation and municipal housing. | **Figure 3.** Where the more and less deprived areas lie, and the transit network over the compact pre-war blocks. |
-| ![Access](figures/Fig_access_bivariate.png) | ![Destinations](figures/Fig_destinations_main.png) |
-| **Figure 4.** What the timetable offers: deprivation against jobs reachable within 30 minutes, and concentration curves. | **Figure 5.** Deprivation of destinations: offered by the network, reached by riders, and the difference. |
+| ![Construction](figures/Fig_construction.png) | ![The offer](figures/Fig_access_bivariate.png) |
+| **Figure 2.** How deprivation is assigned to stop catchments: osiedle score; in one window where four osiedla meet, walking catchments and catchment deprivation; all stops with the rings and sectors that define location. | **Figure 3.** What the network offers: the network over the compact pre-war blocks, deprivation against jobs reachable within 30 minutes, and concentration curves. |
 | ![Periphery](figures/Fig_periphery.png) | ![Offer and use](figures/Fig_offer_use.png) |
-| **Figure 6.** What the network offers at the periphery: osiedla more than 5 km from the centre, the deprived ones in red. | **Figure 7.** Offer and use: each gap split into what the network offers and the use riders make of it, and use with the offer held fixed. |
+| **Figure 4.** What the network offers at the periphery: osiedla more than 5 km from the centre, the deprived ones in red. | **Figure 5.** Offer and use: each gap split into what the network offers and the use riders make of it, use with the offer held fixed, and where use changes the deprivation of destinations. |
 | ![Two streams](figures/Fig_two_streams.png) | ![Sharing benchmarks](figures/Fig_sharing_benchmark.png) |
-| **Figure 8.** Two streams on one network: riding (corridors), getting off (stops) and the direction of each third's ride-kilometres. | **Figure 9.** Sharing the network, on the lines and where riders get off, against deprivation scattered at random and the map turned or mirrored around the centre. |
+| **Figure 6.** Two streams on one network: riding (corridors), getting off (stops) and the direction of each third's ride-kilometres. | **Figure 7.** Sharing the network, on the lines and where riders get off, against deprivation scattered at random and the map turned or mirrored around the centre. |
 | ![Decomposition](figures/Fig_decomposition.png) | |
-| **Figure 10.** The 22 gaps between more and less deprived catchments and the parts accounted for by location, service, land use and population. | |
+| **Figure 8.** The 22 gaps between more and less deprived catchments and the parts accounted for by location, service, land use and population. | |
 
 Figure 1 is the framework drawn above.
 
@@ -91,6 +89,8 @@ Drawn for the supplement, not yet numbered in it:
 | Route networks of the least and the most deprived thirds, and their difference. | The two streams as the lines offer them on weekdays, and as ridden at weekends. |
 | ![Rotation benchmark](figures/Fig_rotation_benchmark.png) | ![Meeting places](figures/Fig_meeting_places.png) |
 | Each measure of sharing over the 47 turned and mirrored maps of deprivation. | Where the two thirds get off, and the share of each third's arrivals at the 24 busiest stops. |
+| ![Deprived areas](figures/Fig_deprived_areas_map.png) | ![Destinations](figures/Fig_destinations_main.png) |
+| Where the more and less deprived areas lie, and the network over the compact pre-war blocks (formerly Figure 3). | Deprivation of destinations offered, reached, and their difference (formerly Figure 5). |
 
 </details>
 
@@ -121,8 +121,8 @@ flowchart LR
 | [`05_passenger_counts.R`](scripts/05_passenger_counts.R) | ingest, 40–42, 22, 23, 58 | Ingest, trip-level cleaning, stop-to-stop flows by three estimators, expansion, same-trip indices, descriptive checks. |
 | [`06_destinations_routes_access.R`](scripts/06_destinations_routes_access.R) | 45–47, 50, 51, 53, 54 | Destinations against a network baseline, interchanges and transfers, routes, timetable-based access. |
 | [`07_usage_responses.R`](scripts/07_usage_responses.R) | 43, 48, 52, 61 | Tests stated before modelling, early boardings, responses to leave days, service cuts and weather, tram and bus. |
-| [`08_gaps_inference.R`](scripts/08_gaps_inference.R) | 56, 55, 59, 63, 65–68, 73–83 | The 22 gaps raw, net of position and net of land use and population; decomposition; CR2-Satterthwaite inference, wild cluster bootstrap, measurement error, equivalence; spatial placebo; equity and counterfactual geographies; estimator checks; offer and use; peripheral deprivation with osiedle-level randomisation inference; the early offer and its use; what location stands for (jobs nearby, structure of service); segregation by destination (geography, network, use); sharing the network on corridors, lines and stops, against deprivation scattered at random and the map turned or mirrored; Figures 8 and 9. |
-| [`09_figures.R`](scripts/09_figures.R) | 57, 60, 64, 71, 70, 69, 72 | Main-text figures 2–5 and 10, the route networks of each third and the graphical abstract (Figures 6–9 are drawn by sections 75, 74 and 81). |
+| [`08_gaps_inference.R`](scripts/08_gaps_inference.R) | 56, 55, 59, 63, 65–68, 73–83 | The 22 gaps raw, net of position and net of land use and population; decomposition; CR2-Satterthwaite inference, wild cluster bootstrap, measurement error, equivalence; spatial placebo; equity and counterfactual geographies; estimator checks; offer and use; peripheral deprivation with osiedle-level randomisation inference; the early offer and its use; what location stands for (jobs nearby, structure of service); segregation by destination (geography, network, use); sharing the network on corridors, lines and stops, against deprivation scattered at random and the map turned or mirrored; Figures 4–7. |
+| [`09_figures.R`](scripts/09_figures.R) | 57, 60, 64, 71, 70, 69, 72 | Main-text figures 2, 3 and 8, maps for the supplement and the graphical abstract (Figures 4–7 are drawn by sections 75, 74 and 81). |
 
 Helpers in [`R/`](R): `setup.R` (paths and the section runner), `od_expand.R` (expansion of counted flows to all operated trips), `cr_inference.R` (CR2 standard errors with Satterthwaite degrees of freedom, effective clusters, wild cluster bootstrap), `seg_index.R` (indices of sharing the network and the turned maps of deprivation), `map_style.R` (shared cartographic style) and `tissue_descriptors.R` (land-use descriptors for cells and catchments).
 

@@ -38,12 +38,12 @@ ms_labels <- function(L, which = NULL, size = 2.5) {
                            min.segment.length = Inf, force = 0.3, seed = 7, box.padding = 0.05, inherit.aes = FALSE)
 }
 ms_centre <- function(L) geom_point(data = L$centre, aes(X, Y), shape = 3, size = 2.2, stroke = 0.7, colour = MSTY$ink, inherit.aes = FALSE)
-## 2-km scale bar (0-1-2 km, alternating) in the bottom-left corner
-ms_scalebar <- function(L, km = 2, pos = c(0.05, 0.06), h = 0.010) {
+## 2-km scale bar (0-1-2 km, alternating) in the bottom-left corner; `text` scales the labels
+ms_scalebar <- function(L, km = 2, pos = c(0.05, 0.06), h = 0.010, text = 1) {
   b <- L$bbox; x0 <- b[["xmin"]] + pos[1] * (b[["xmax"]] - b[["xmin"]]); y0 <- b[["ymin"]] + pos[2] * (b[["ymax"]] - b[["ymin"]]); hh <- h * (b[["ymax"]] - b[["ymin"]])
   seg <- data.table(x1 = x0 + c(0, 500 * km), x2 = x0 + c(500 * km, 1000 * km), f = c(MSTY$ink, "#ffffff"))
   list(annotate("rect", xmin = seg$x1, xmax = seg$x2, ymin = y0, ymax = y0 + hh, fill = seg$f, colour = MSTY$ink, linewidth = 0.25),
-       annotate("text", x = x0 + c(0, 500 * km, 1000 * km), y = y0 + 2.6 * hh, label = c("0", km / 2, paste(km, "km")), size = 2.3, colour = MSTY$ink, vjust = 0))
+       annotate("text", x = x0 + c(0, 500 * km, 1000 * km), y = y0 + 2.6 * hh, label = c("0", km / 2, paste(km, "km")), size = 2.3 * text, colour = MSTY$ink, vjust = 0))
 }
 ms_coord <- function(L, pad = 300) coord_sf(datum = NA, expand = FALSE, xlim = c(L$bbox[["xmin"]] - pad, L$bbox[["xmax"]] + pad), ylim = c(L$bbox[["ymin"]] - pad, L$bbox[["ymax"]] + pad))
 ## theme: void map, plain panel titles, legends at the bottom, bold lowercase tags (patchwork tag_levels = "a")
@@ -54,3 +54,17 @@ theme_ms <- function(base = 9.5) theme_void(base_size = base) + theme(
   legend.title.position = "top", plot.background = element_rect(fill = "#ffffff", colour = NA), plot.margin = margin(4, 4, 4, 4))
 DEPSCALE <- function(lim, name = "Catchment deprivation (z)", ...) scale_fill_gradient2(low = MSTY$least, mid = "#f0efec", high = MSTY$most, midpoint = 0,
                                                                           limits = c(-lim, lim), oob = scales::squish, name = name, ...)
+## rings of distance (2, 4, 6 and 8 km) and the eight sectors around the Old Market Square; `text` scales the labels
+ms_guides <- function(text = 1) {
+  ctr <- st_transform(st_sfc(st_point(c(16.9335, 52.4083)), crs = 4326), 2180); c0 <- st_coordinates(ctr)[1, 1:2]
+  rings <- do.call(c, lapply(c(2, 4, 6, 8), function(r) st_cast(st_buffer(ctr, r * 1000, nQuadSegs = 60), "LINESTRING")))
+  rl <- st_sf(r = paste0(c(2, 4, 6, 8), " km"), geometry = st_sfc(lapply(c(2, 4, 6, 8), function(r) st_point(c0 + c(r * 1000 * cos(pi / 4) + 150, r * 1000 * sin(pi / 4)))), crs = 2180))
+  rays <- st_sfc(lapply(seq(22.5, 337.5, 45) * pi / 180, function(a) st_linestring(rbind(c0 + 1000 * c(cos(a), sin(a)), c0 + 9500 * c(cos(a), sin(a))))), crs = 2180)
+  sect <- st_sf(lab = c("E", "NE", "N", "NW", "W", "SW", "S", "SE"),
+                geometry = st_sfc(lapply(seq(0, 315, 45) * pi / 180, function(a) st_point(c0 + 10200 * c(cos(a), sin(a)))), crs = 2180))
+  list(geom_sf(data = rings, colour = MSTY$ink, linewidth = 0.25, linetype = "22", alpha = 0.55, inherit.aes = FALSE),
+       geom_sf(data = rays, colour = MSTY$ink, linewidth = 0.2, alpha = 0.3, inherit.aes = FALSE),
+       geom_sf_text(data = rl, aes(label = r), size = 2.2 * text, colour = MSTY$muted, hjust = 0, inherit.aes = FALSE),
+       geom_sf_text(data = sect, aes(label = lab), size = 2.6 * text, colour = MSTY$ink, fontface = "bold", inherit.aes = FALSE),
+       geom_sf(data = ctr, shape = 3, size = 2, stroke = 0.6, colour = MSTY$ink, inherit.aes = FALSE))
+}

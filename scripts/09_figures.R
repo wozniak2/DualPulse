@@ -1,15 +1,15 @@
 ## DualPulse | stage 9: Main-text figures and graphical abstract
 ##
-## Figures 2-5 and 10 of the main text, the route networks of supplementary S7 and the graphical abstract (Figure 1 is drawn in LaTeX; Figures 6 and 7 by sections 75 and 74 of stage 8, Figures 8 and 9 by section 81).
+## Figures 2, 3 and 8 of the main text, the route networks and other maps for the supplement and the graphical abstract (Figure 1 is drawn in LaTeX; Figure 4 by section 75, Figure 5 by section 74 and Figures 6 and 7 by section 81 of stage 8).
 ## Supplementary figures are drawn by the sections that compute them.
 ##
 ## Sections (named by the numbered scripts they replace, as in the project notes):
 ##   57      Figure 2: how deprivation is assigned to stop catchments
-##   60      Figure 3: where the more and less deprived areas lie
-##   64      Figure 10: the gaps and their parts
-##   71      Figure 5: deprivation of destinations
+##   60      Where the more and less deprived areas lie (supplement); network panel of Figure 3
+##   64      Figure 8: the gaps and their parts
+##   71      Deprivation of destinations (supplement)
 ##   70      Route networks of each third (supplementary S7)
-##   69      Figure 4: what the timetable offers
+##   69      Figure 3: what the network offers
 ##   72      Graphical abstract
 ##
 ## Run from the repository root: Rscript run.R 9   (one section: Rscript run.R 9:72)
@@ -23,12 +23,11 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   ## (manuscript §2.2c-d, §2.4-2.5). Reproduces the objects of scripts 20, 34 and
   ## 39; nothing is re-estimated.
   ##
-  ## Main version (Figure 2), six panels: (a) the deprivation score by osiedle; in one
+  ## Main version (Figure 2), four panels: (a) the deprivation score by osiedle; in one
   ##   window, around Niezłomnych, where Jeżyce, Stare Miasto, Św. Łazarz and Wilda meet:
-  ##   (b) the walking catchments on the pedestrian network, (c) residents coloured by
-  ##   their osiedle's score, (d) catchment deprivation, the residents' mean; (e) catchment
-  ##   deprivation of every stop; (f) the municipal share of catchment residents in the
-  ##   same window.
+  ##   (b) the walking catchments on the pedestrian network, (c) catchment deprivation,
+  ##   the residents' mean; (d) catchment deprivation of every stop, with the rings of
+  ##   distance and the sectors that define location.
   ## Full version (supplementary Figure S1), twelve panels:
   ## Row 1, deprivation by osiedle: (a) registered unemployment and (b) social-
   ##   assistance poverty, each the city's standardised score averaged over the
@@ -189,29 +188,31 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
     scale_shape_manual(values = c("Stops (poles in b and d, complexes in e)" = 21), labels = "Stop poles", name = NULL)
   ggsave(file.path(fig, "Fig_construction_full.png"), f, width = 11, height = 16.2, dpi = 300, bg = surf)
 
-  ## main version, six panels, one window (W3) for every zoomed panel, marked in a and e
+  ## main version, four panels: (a) the score; in one window (W3), (b) the catchments and (c) catchment deprivation;
+  ## (d) catchment deprivation of every stop with the rings of distance and the sectors that define location.
+  ## Residents and municipal housing are shown in the full version.
+  source(file.path(REPO, "R/map_style.R"))
   mark <- list(geom_sf(data = W3$line, colour = ink, linewidth = 0.5),
-               annotate("label", x = W3$b[["xmax"]] + 250, y = W3$b[["ymax"]], label = "b–d, f", hjust = 0, vjust = 1, size = 3.3, colour = ink, fill = "#ffffff",
+               annotate("label", x = W3$b[["xmax"]] + 250, y = W3$b[["ymax"]], label = "b, c", hjust = 0, vjust = 1, size = 4.4, colour = ink, fill = "#ffffff",
                         linewidth = 0, label.padding = unit(0.1, "lines")))
   qa <- city_map("dep", "Deprivation score by osiedle") + mark
-  qb <- p_catch(W3) + os_names(W3, 3.1) + labs(subtitle = "Walking catchments on the pedestrian network")
-  qc <- p_res(W3) + scale_size_area(max_size = 4.6, limits = c(0, max(pp$pop)), breaks = c(10, 100, 500), name = "Residents per address (c)",
-                                    guide = guide_legend(title.position = "top", override.aes = list(fill = "#8f8d86")))
-  qd <- p_cdep(W3, 2.9)
-  qe <- all_stops() + mark + geom_sf(data = st_centroid(st_geometry(C)), colour = ink, size = 0.35, stroke = 0, shape = 16, alpha = 0.8) +
-    labs(subtitle = "Catchment deprivation of every stop") + mth
-  qf <- p_muni(W3, 3.1)
-  f6 <- (qa + qb + qc) / (qd + qe + qf) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
-    theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA), plot.subtitle = element_text(colour = ink, size = 10.5, hjust = 0.5, margin = margin(b = 3)),
-          legend.title = element_text(colour = ink, size = 10), legend.text = element_text(colour = ink2, size = 9.5), plot.tag = element_text(face = "bold", size = 12))
-  ggsave(file.path(fig, "Fig_construction.png"), f6, width = 10, height = 7.9, dpi = 300, bg = surf)
+  qb <- p_catch(W3) + os_names(W3, 3.9) + labs(subtitle = "Walking catchments (up to 400 m)")
+  qc <- p_cdep(W3, 3.3)
+  qd <- all_stops() + ms_guides(1.75) + mark + labs(subtitle = "All stops, with rings and sectors") + mth
+  f4 <- (qa + qb) / (qc + qd) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
+    theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA), plot.subtitle = element_text(colour = ink, size = 12.5, hjust = 0.5, margin = margin(b = 3)),
+          legend.title = element_text(colour = ink, size = 12), legend.text = element_text(colour = ink2, size = 11.5), plot.tag = element_text(face = "bold", size = 13.5)) &
+    scale_shape_manual(values = c("Stops (poles in b and d, complexes in e)" = 21), labels = "Stop poles", name = NULL)
+  ggsave(file.path(fig, "Fig_construction.png"), f4, width = 7.8, height = 8.4, dpi = 320, bg = surf)
   file.copy(file.path(fig, c("Fig_construction.png", "Fig_construction_full.png")), ms_fig, overwrite = TRUE)
-  cat("Saved Fig_construction.png (six panels) and Fig_construction_full.png (twelve panels)\n")
+  cat("Saved Fig_construction.png (four panels) and Fig_construction_full.png (twelve panels)\n")
 })
 
-## ── 60 · Figure 3: where the more and less deprived areas lie ──────────────────────────────────────────────
-section("60", "Figure 3: where the more and less deprived areas lie", {
-  ## Where the more and less deprived areas lie, and why (manuscript §3.1).
+## ── 60 · Where the more and less deprived areas lie (supplement); network panel of Figure 3 ────────────────
+section("60", "Where the more and less deprived areas lie; the network panel of Figure 3", {
+  ## Where the more and less deprived areas lie, and why (manuscript §3.1). The two-panel figure is kept for the
+  ## supplement; panel (b), the network, is also saved (panel_network.rds) for Figure 3 (section 69), and the
+  ## rings and sectors of panel (a) are drawn on Figure 2d (section 57).
   ## (a) Stop catchments of the least and the most deprived thirds (the comparison
   ##     groups of Table 2), with rings of distance (2, 4, 6 and 8 km) and the eight
   ##     sectors around the Old Market Square.
@@ -239,16 +240,6 @@ section("60", "Figure 3: where the more and less deprived areas lie", {
   vc$third <- factor(fifelse(is.na(vc$third), "other", vc$third), levels = c("least", "middle", "most", "other"))
   cat("Catchments by group:", paste(names(table(vc$third)), table(vc$third), collapse = "; "), "\n")
 
-  ## rings and sectors around the Old Market Square
-  ctr <- st_transform(st_sfc(st_point(c(16.9335, 52.4083)), crs = 4326), 2180)
-  rings <- do.call(c, lapply(c(2, 4, 6, 8), function(r) st_cast(st_buffer(ctr, r * 1000, nQuadSegs = 60), "LINESTRING")))
-  rl <- st_sf(r = paste0(c(2, 4, 6, 8), " km"), geometry = st_sfc(lapply(c(2, 4, 6, 8), function(r) st_point(st_coordinates(ctr)[1, 1:2] + c(r * 1000 * cos(pi / 4) + 150, r * 1000 * sin(pi / 4)))), crs = 2180))
-  ang <- seq(22.5, 337.5, 45) * pi / 180
-  rays <- st_sfc(lapply(ang, function(a) st_linestring(rbind(st_coordinates(ctr)[1, 1:2] + 1000 * c(cos(a), sin(a)), st_coordinates(ctr)[1, 1:2] + 9500 * c(cos(a), sin(a))))), crs = 2180)
-  lab_ang <- seq(0, 315, 45) * pi / 180
-  sect <- st_sf(lab = c("E", "NE", "N", "NW", "W", "SW", "S", "SE"),
-                geometry = st_sfc(lapply(lab_ang, function(a) st_point(st_coordinates(ctr)[1, 1:2] + 10200 * c(cos(a), sin(a)))), crs = 2180))
-
   ## transit network: consecutive stop complexes on Tuesday-Thursday trips
   st <- fread(file.path(gtfs, "stops.txt"), encoding = "UTF-8")[, .(stop_id, stop_name)]
   tr <- fread(file.path(gtfs, "trips.txt"), encoding = "UTF-8")[service_id == 1, .(trip_id, route_id)]
@@ -275,11 +266,7 @@ section("60", "Figure 3: where the more and less deprived areas lie", {
 
   ## ── panels (shared map style, script map_style.R) ───────────────────────
   source(file.path(REPO, "R/map_style.R")); L <- ms_layers(out_dir)
-  guides_ <- list(geom_sf(data = rings, colour = ink, linewidth = 0.25, linetype = "22", alpha = 0.55),
-                  geom_sf(data = rays, colour = ink, linewidth = 0.2, alpha = 0.3),
-                  geom_sf_text(data = rl, aes(label = r), size = 2.2, colour = ink2, hjust = 0),
-                  geom_sf_text(data = sect, aes(label = lab), size = 2.6, colour = ink, fontface = "bold"),
-                  geom_sf(data = ctr, shape = 3, size = 2, stroke = 0.6, colour = ink))
+  guides_ <- ms_guides()                                                     # rings of distance and the eight sectors
   pa <- ggplot() + ms_base(L) +
     geom_sf(data = vc[vc$third != "other", ], aes(fill = third), colour = NA) +
     scale_fill_manual(values = c(least = MSTY$least, middle = MSTY$middle, most = MSTY$most),
@@ -287,22 +274,24 @@ section("60", "Figure 3: where the more and less deprived areas lie", {
     ms_water_top(L) + geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + ms_outline(L) + guides_ +
     ms_labels(L, c("Jeżyce", "Łazarz", "Wilda", "Górczyn", "Piątkowo", "Winogrady", "Rataje", "Chartowo", "Główna", "Krzesiny"), size = 2.3) +
     ms_scalebar(L, pos = c(0.0, 0.02)) + coord_sf(datum = NA) + labs(title = "Stop catchments by deprivation") + theme_ms()
-  pb <- ggplot() + ms_base(L) +
+  net_panel <- function(gs, base, title) ggplot() + ms_base(L) +
     geom_sf(data = compact, fill = "#e0c9a6", colour = NA) + ms_water_top(L) +
     geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + ms_outline(L) +
     geom_sf(data = segs, aes(linewidth = departures, colour = mode), lineend = "round") +
-    scale_linewidth_continuous(range = c(0.12, 2.4), breaks = c(100, 300, 600), name = "Departures per weekday") +
-    scale_colour_manual(values = c(Tram = ink, Bus = "#8f8d86"), name = NULL) + guides_ +
-    coord_sf(datum = NA) + labs(title = "Transit network over compact pre-war blocks (beige)") + theme_ms() +
-    guides(colour = guide_legend(override.aes = list(linewidth = 1.2)))
+    scale_linewidth_continuous(range = c(0.12, 2.4), breaks = c(100, 300, 600), name = "Weekday departures") +
+    scale_colour_manual(values = c(Tram = ink, Bus = "#8f8d86"), name = NULL) + gs +
+    coord_sf(datum = NA) + labs(title = title) + theme_ms(base) +
+    guides(colour = guide_legend(override.aes = list(linewidth = 1.2))) + theme(legend.box = "vertical", legend.spacing.y = unit(0.05, "cm"))
+  pb <- net_panel(guides_, 9.5, "Transit network over compact pre-war blocks (beige)")
   f <- (pa | pb) + plot_annotation(tag_levels = "a") & theme(plot.background = element_rect(fill = surf, colour = NA))
   ggsave(file.path(fig, "Fig_deprived_areas_map.png"), f, width = 11, height = 6.4, dpi = 300, bg = surf)
-  file.copy(file.path(fig, "Fig_deprived_areas_map.png"), ms_fig, overwrite = TRUE)
-  cat("Saved Fig_deprived_areas_map.png\n")
+  ## Figure 3a: the same panel with text sized for a figure saved 8.6 in wide
+  saveRDS(net_panel(ms_guides(1.6), 13, "Network over pre-war blocks (beige)"), file.path(fig, "panel_network.rds"))
+  cat("Saved Fig_deprived_areas_map.png (supplement) and panel_network.rds (Figure 3a)\n")
 })
 
-## ── 64 · Figure 10: the gaps and their parts ───────────────────────────────────────────────────────────────
-section("64", "Figure 10: the gaps and their parts", {
+## ── 64 · Figure 8: the gaps and their parts ────────────────────────────────────────────────────────────────
+section("64", "Figure 8: the gaps and their parts", {
   ## Figure replacing the 22-row table of the gaps (main text): for every measure, the raw slope on
   ## deprivation (open circle), the parts of it accounted for by location, service at the stop, land use and
   ## population (stacked bars; Gelbach decomposition of script 56, primary specification), and the
@@ -330,26 +319,26 @@ section("64", "Figure 10: the gaps and their parts", {
   xr <- range(c(P[, .(s = sum(pmax(est, 0))), by = msr]$s, P[, .(s = sum(pmin(est, 0))), by = msr]$s, R$raw, R$lo, R$hi)) * 1.05
   g <- ggplot() + geom_vline(xintercept = 0, colour = "#9a9893", linewidth = 0.35) +
     geom_col(data = P, aes(est, label, fill = part), width = 0.62, colour = "#ffffff", linewidth = 0.25) +
-    geom_errorbarh(data = R, aes(xmin = lo, xmax = hi, y = label), height = 0, linewidth = 0.55, colour = "#1f1e1c") +
-    geom_point(data = R, aes(est, label, shape = "Remainder (95% interval)"), size = 2.0, colour = "#1f1e1c", fill = "#1f1e1c") +
-    geom_point(data = R, aes(raw, label, shape = "Raw gap"), size = 2.2, colour = "#1f1e1c", fill = "#ffffff", stroke = 0.6) +
-    geom_text(data = R, aes(x = xr[2] + 0.06, y = label, label = nat), hjust = 0, size = 2.7, colour = "#4a4945") +
+    geom_errorbarh(data = R, aes(xmin = lo, xmax = hi, y = label), height = 0, linewidth = 0.7, colour = "#1f1e1c") +
+    geom_point(data = R, aes(est, label, shape = "Remainder (95% interval)"), size = 2.7, colour = "#1f1e1c", fill = "#1f1e1c") +
+    geom_point(data = R, aes(raw, label, shape = "Raw gap"), size = 2.9, colour = "#1f1e1c", fill = "#ffffff", stroke = 0.6) +
+    geom_text(data = R, aes(x = xr[2] + 0.06, y = label, label = nat), hjust = 0, size = 3.7, colour = "#4a4945") +
     scale_shape_manual(values = c("Raw gap" = 21, "Remainder (95% interval)" = 18), name = NULL) +
     scale_fill_manual(values = pal, name = "Accounted for by") +
-    scale_x_continuous(limits = c(xr[1], xr[2] + 0.62), breaks = seq(-1, 1, 0.2)[seq(-1, 1, 0.2) >= xr[1] - 0.05 & seq(-1, 1, 0.2) <= xr[2] + 0.05]) +
+    scale_x_continuous(limits = c(xr[1], xr[2] + 0.78), breaks = seq(-1, 1, 0.2)[seq(-1, 1, 0.2) >= xr[1] - 0.05 & seq(-1, 1, 0.2) <= xr[2] + 0.05]) +
     facet_grid(dim ~ ., scales = "free_y", space = "free_y", switch = "y") +
-    labs(x = "Slope on deprivation (SD per SD) and its parts                                                   Median: least \u2192 most deprived third", y = NULL) +
-    guides(fill = guide_legend(order = 1, nrow = 1), shape = guide_legend(order = 2)) +
-    theme_minimal(base_size = 9.5) +
+    labs(x = "Slope on deprivation (SD per SD) and its parts", y = NULL) +
+    guides(fill = guide_legend(order = 1, nrow = 2), shape = guide_legend(order = 2)) +
+    theme_minimal(base_size = 12.5) +
     theme(legend.position = "top", legend.box = "vertical", panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
-          strip.placement = "outside", strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 1), axis.title.x = element_text(hjust = 0, size = 8.5),
+          strip.placement = "outside", strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 1), axis.title.x = element_text(hjust = 0.5, size = 12), axis.text.y = element_text(size = 12, colour = "#2b2b28"),
           panel.spacing.y = unit(0.5, "lines"), plot.background = element_rect(fill = "#ffffff", colour = NA))
-  ggsave(file.path(fig, "Fig_decomposition.png"), g, width = 11, height = 9.5, dpi = 220, bg = "#ffffff")
+  ggsave(file.path(fig, "Fig_decomposition.png"), g, width = 8.8, height = 10.6, dpi = 280, bg = "#ffffff")
   cat("Saved Fig_decomposition.png\n")
 })
 
-## ── 71 · Figure 5: deprivation of destinations ─────────────────────────────────────────────────────────────
-section("71", "Figure 5: deprivation of destinations", {
+## ── 71 · Deprivation of destinations (supplement) ──────────────────────────────────────────────────────────
+section("71", "Deprivation of destinations (supplement)", {
   ## Where riders are carried (main text): deprivation of the destinations of each origin catchment's riders,
   ## weekdays, (a) offered by the network (riders assigned to every line and direction at their stop in
   ## proportion to its departures), (b) reached by riders, (c) reached minus offered; (d) destination against
@@ -438,12 +427,13 @@ section("70", "Route networks of each third (supplementary S7)", {
   cat("Saved Fig_route_networks_main.png\n")
 })
 
-## ── 69 · Figure 4: what the timetable offers ─────────────────────────────────────────────────────────────────
-section("69", "Figure 4: what the timetable offers", {
-  ## What the network offers (main text): (a) bivariate map of stop catchments, thirds of deprivation x thirds
-  ## of morning-peak access (share of the city's jobs within 30 minutes); the legend gives the share of
-  ## residents in each cell; (b) concentration curves of service, access and ride length over residents ranked
-  ## from the most to the least deprived catchment (script 65 computes the indices).
+## ── 69 · Figure 3: what the network offers ─────────────────────────────────────────────────────────────────
+section("69", "Figure 3: what the network offers", {
+  ## What the network offers (main text): (a) the transit network over the compact pre-war blocks (drawn by
+  ## section 60); (b) bivariate map of stop catchments, thirds of deprivation x thirds of morning-peak access
+  ## (share of the city's jobs within 30 minutes); the legend gives the share of residents in each cell;
+  ## (c) concentration curves of service, access and ride length over residents ranked from the most to the
+  ## least deprived catchment (script 65 computes the indices).
   ## Bivariate colours: bilinear mix in CIELab of four corners (warm grey: less deprived, poor access; red:
   ## more deprived, poor access; blue: less deprived, good access; dark violet: more deprived, good access).
   ## Inputs: access_origin.csv (script 54), gap_thirds_stops.csv and gap_stops.rds (56), catchments (39)
@@ -471,17 +461,17 @@ section("69", "Figure 4: what the timetable offers", {
   P <- merge(CP[, "stop_name"], D[, .(stop_name, col)], by = "stop_name")
 
   pm <- ggplot() + ms_base(L) + geom_sf(data = P, aes(fill = col), colour = NA) + scale_fill_identity() + ms_water_top(L) + ms_outline(L) +
-    ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Chartowo", "Główna", "Krzesiny", "Głuszyna", "Fabianowo-Kotowo")) +
-    ms_centre(L) + ms_scalebar(L) + ms_coord(L) + theme_ms() + labs(title = "Deprivation and access to jobs, by stop catchment")
+    ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Główna", "Krzesiny", "Głuszyna"), size = 3.9) +
+    ms_centre(L) + ms_scalebar(L, km = 4, text = 1.6) + ms_coord(L) + theme_ms(13) + labs(title = "Deprivation and access to jobs")
   ## legend: 3 x 3 tiles with the share of residents in each cell
   LG <- merge(BV, D[, .(res = sum(residents)), by = .(i, j)], by = c("i", "j"), all.x = TRUE)[is.na(res), res := 0][, share := 100 * res / sum(res)]
   pl <- ggplot(LG, aes(j, i)) + geom_tile(aes(fill = col), colour = "#ffffff", linewidth = 0.8) + scale_fill_identity() +
-    geom_text(aes(label = sprintf("%.0f%%", share), colour = ifelse(i + j >= 5 | (i == 3 & j == 1), "#ffffff", MSTY$ink)), size = 2.3) + scale_colour_identity() +
+    geom_text(aes(label = sprintf("%.0f%%", share), colour = ifelse(i + j >= 5 | (i == 3 & j == 1), "#ffffff", MSTY$ink)), size = 3.3) + scale_colour_identity() +
     scale_x_continuous(breaks = 1:3, labels = c("low", "", "high"), expand = c(0, 0)) + scale_y_continuous(breaks = 1:3, labels = c("least", "", "most"), expand = c(0, 0)) +
     labs(x = "Jobs within 30 min \u2192", y = "Deprivation \u2192") + coord_equal() +
-    theme_minimal(base_size = 7.5) + theme(panel.grid = element_blank(), axis.title = element_text(size = 7.5, colour = MSTY$ink), axis.text = element_text(size = 6.5, colour = MSTY$muted),
+    theme_minimal(base_size = 11) + theme(panel.grid = element_blank(), axis.title = element_text(size = 11, colour = MSTY$ink), axis.text = element_text(size = 10, colour = MSTY$muted),
                                             plot.background = element_rect(fill = NA, colour = NA))
-  pa <- pm + inset_element(pl, left = 0.765, bottom = 0.0, right = 1.00, top = 0.27, align_to = "panel")
+  pa <- pm                                                                  # the 3 x 3 legend (pl) sits beside the curves, hiding no catchments
 
   ## concentration curves (needs gap_stops.rds of script 56)
   X <- readRDS(file.path(s2, "gap_stops.rds")); X[, `:=`(residents = expm1(lres), departures = exp(l_dep))]
@@ -495,12 +485,14 @@ section("69", "Figure 4: what the timetable offers", {
   pb <- ggplot(CC, aes(x, y, colour = var)) + geom_abline(slope = 1, intercept = 0, colour = "#b9b7b0", linetype = "dashed", linewidth = 0.4) +
     geom_line(linewidth = 0.8) + scale_colour_manual(values = pal, name = NULL) +
     scale_x_continuous(labels = scales::percent, expand = c(0.01, 0)) + scale_y_continuous(labels = scales::percent, expand = c(0.01, 0)) + coord_equal() +
-    labs(title = "Concentration among the residents of more deprived catchments", x = "Residents, cumulative, from the most deprived catchment", y = "Cumulative share") +
-    theme_minimal(base_size = 9) + theme(plot.title = element_text(size = 9.5, hjust = 0.5, colour = MSTY$ink), legend.position = c(0.68, 0.18), legend.text = element_text(size = 7.5),
-                                         legend.key.height = unit(0.35, "cm"), panel.grid.minor = element_blank(), plot.background = element_rect(fill = "#ffffff", colour = NA),
-                                         axis.title = element_text(size = 8, colour = MSTY$ink), plot.tag = element_text(face = "bold", size = 11.5))
-  g <- (pa | pb) + plot_layout(widths = c(1.35, 1)) + plot_annotation(tag_levels = list(c("a", "", "b")))
-  ggsave(file.path(fig, "Fig_access_bivariate.png"), g, width = 12.5, height = 6.6, dpi = 250, bg = "#ffffff")
+    labs(title = "Concentration over residents, most deprived first", x = "Residents, cumulative, from the most deprived catchment", y = "Cumulative share") +
+    theme_minimal(base_size = 13) + theme(plot.title = element_text(size = 13, hjust = 0.5, colour = MSTY$ink), legend.position = c(0.64, 0.2), legend.text = element_text(size = 12),
+                                         legend.key.height = unit(0.5, "cm"), panel.grid.minor = element_blank(), plot.background = element_rect(fill = "#ffffff", colour = NA),
+                                         axis.title = element_text(size = 12.5, colour = MSTY$ink), axis.text = element_text(size = 11.5), plot.tag = element_text(face = "bold", size = 14))
+  pn <- readRDS(file.path(fig, "panel_network.rds"))                        # the network over the pre-war blocks (section 60)
+  g <- (pn | pa) / (plot_spacer() + pb + pl + plot_layout(widths = c(0.1, 1, 0.55))) + plot_layout(heights = c(1.05, 1)) +
+    plot_annotation(tag_levels = list(c("a", "b", "c", ""))) & theme(plot.tag = element_text(face = "bold", size = 14))
+  ggsave(file.path(fig, "Fig_access_bivariate.png"), g, width = 8.6, height = 9.6, dpi = 300, bg = "#ffffff")
   cat(sprintf("Access thirds: jobs within 30 min <= %.1f%% (low), <= %.1f%% (middle), above (high)\n", qa[1], qa[2]))
   print(LG[order(-i, j), .(deprivation = c("least", "middle", "most")[i], access = c("low", "middle", "high")[j], residents = round(res), share = round(share, 1))])
   cat("Saved Fig_access_bivariate.png\n")

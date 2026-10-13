@@ -968,6 +968,8 @@ section("74", "Offer and use: what the network offers and how riders use it", {
   ## (b) Use given the offer: the observed measure on deprivation with the offer held fixed (regression
   ##     adjustment), alone, with position and with position, land use and population.
   ## (c) How much of the variation between origins the offer and location capture (R2, deprivation left out).
+  ## Figure 5 of the main text: (a) the split and (b) use given the offer, weekdays, and a map of the deprivation
+  ## of destinations reached minus offered, by origin catchment.
   ## CR2 standard errors by osiedle with Satterthwaite df; Benjamini-Hochberg q across the nine measures within
   ## each window, part and step. Windows: Monday-Thursday as a whole (main) and its morning peak, when most
   ## boardings start from home (check).
@@ -1041,21 +1043,34 @@ section("74", "Offer and use: what the network offers and how riders use it", {
                                                                   labels = c("Observed gap", "Offered by the network", "Use of the network"))]
   pb <- P[analysis == "given offer"][, step := factor(step, levels = c("raw", "position", "full"),
                                                         labels = c("Offer held fixed", "+ position", "+ land use and population"))]
-  th <- theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), legend.position = "bottom",
-                                              plot.title = element_text(face = "bold", size = 10), legend.title = element_blank())
+  th <- theme_minimal(base_size = 13.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), legend.position = "bottom", legend.direction = "vertical",
+                                              plot.title = element_text(face = "bold", size = 13.5), legend.title = element_blank(), axis.text.y = element_text(size = 13.5, colour = "#2b2b28"),
+                                              axis.text.x = element_text(size = 12.5), legend.text = element_text(size = 13))
   dodge <- position_dodge(width = 0.65)
   g1 <- ggplot(pa, aes(est, label, colour = part)) + geom_vline(xintercept = 0, colour = "#9a9893") +
-    geom_linerange(aes(xmin = lo, xmax = hi), position = dodge, linewidth = 0.6) + geom_point(position = dodge, size = 2) +
-    scale_colour_manual(values = c("#2b2b28", "#8f8d86", "#eb6834")) + labs(title = "(a) The gap: offered + use = observed", x = "Slope on origin deprivation (SD per SD)", y = NULL) + th
+    geom_linerange(aes(xmin = lo, xmax = hi), position = dodge, linewidth = 0.9) + geom_point(position = dodge, size = 2.8) +
+    scale_colour_manual(values = c("#2b2b28", "#8f8d86", "#eb6834")) + labs(title = "(a) Offered + use = observed", x = "Slope (SD per SD)", y = NULL) + th +
+    scale_x_continuous(breaks = seq(-0.4, 0.8, 0.4)) + theme(plot.margin = margin(5, 22, 5, 5))
   g2 <- ggplot(pb, aes(est, label, colour = step)) + geom_vline(xintercept = 0, colour = "#9a9893") +
-    geom_linerange(aes(xmin = lo, xmax = hi), position = dodge, linewidth = 0.6) + geom_point(position = dodge, size = 2) +
-    scale_colour_manual(values = c("#eb6834", "#2a78d6", "#6b6a64")) + labs(title = "(b) Use with the offer held fixed", x = "Slope on origin deprivation (SD per SD)", y = NULL) + th +
+    geom_linerange(aes(xmin = lo, xmax = hi), position = dodge, linewidth = 0.9) + geom_point(position = dodge, size = 2.8) +
+    scale_colour_manual(values = c("#eb6834", "#2a78d6", "#6b6a64")) + labs(title = "(b) Use, offer held fixed", x = "Slope (SD per SD)", y = NULL) + th +
     theme(axis.text.y = element_blank())
-  if (requireNamespace("patchwork", quietly = TRUE)) {
-    g <- patchwork::wrap_plots(g1, g2, widths = c(1, 1))
-    ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 11, height = 5.2, dpi = 200, bg = "white")
-  }
-  cat("\nSaved offer_use.csv, offer_use_r2.csv, Fig_offer_use.png\n")
+  ## (c) map: where riders reach more or less deprived places than their lines offer, weekdays
+  suppressPackageStartupMessages({library(sf); library(patchwork)})
+  source(file.path(REPO, "R/map_style.R")); L <- ms_layers(out_dir)
+  CP <- st_read(file.path(s2, "stop_complexes.gpkg"), "exclusive_400m_network", quiet = TRUE)
+  WD <- dcast(DM[window == "weekday all day", .(stop_name, comp, dest_dep)], stop_name ~ comp, value.var = "dest_dep")[, diff := observed - network]
+  dl <- max(abs(WD$diff), na.rm = TRUE)
+  PM <- merge(CP[, "stop_name"], WD[, .(stop_name, diff)], by = "stop_name")
+  g3 <- ggplot() + ms_base(L) + geom_sf(data = PM, aes(fill = diff), colour = NA) +
+    scale_fill_gradient2(low = "#2f8f83", mid = "#f0efec", high = "#a3527d", midpoint = 0, limits = c(-dl, dl),
+                         name = "Destinations reached minus offered\n(deprivation, z)") +
+    ms_water_top(L) + ms_outline(L) + ms_labels(L, c("Piątkowo", "Winogrady", "Jeżyce", "Łazarz", "Wilda", "Rataje", "Chartowo", "Główna"), size = 4.4) +
+    ms_centre(L) + ms_scalebar(L, km = 4, text = 1.7) + ms_coord(L) + labs(title = "(c) Where use changes destinations") +
+    theme_ms(13.5) + theme(plot.title = element_text(face = "bold", size = 13.5, hjust = 0), legend.key.width = unit(1.6, "cm"))
+  g <- (g1 | g2) / (plot_spacer() + g3 + plot_spacer() + plot_layout(widths = c(0.15, 1, 0.15))) + plot_layout(heights = c(1, 1.3))
+  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 9, height = 10.8, dpi = 280, bg = "white")
+  cat("\nSaved offer_use.csv, offer_use_r2.csv, Fig_offer_use.png (a, b: slopes; c: map)\n")
 })
 
 ## ── 75 · Peripheral deprivation: what the network offers deprived areas far from the centre ─────────────────
@@ -1146,12 +1161,13 @@ section("75", "Peripheral deprivation: what the network offers deprived areas fa
   FL <- melt(F, id.vars = c("osiedle", "deprived", "km_median", "complexes"), measure.vars = c("jobs30", "t_centre", "eff_dest_network", "conn_100"))
   FL[, variable := factor(M[as.character(variable)], levels = M[c("jobs30", "t_centre", "eff_dest_network", "conn_100")])]
   g <- ggplot(FL, aes(km_median, value)) + geom_point(aes(colour = deprived, size = complexes), alpha = 0.85) +
-    ggrepel::geom_text_repel(data = FL[deprived == TRUE], aes(label = osiedle), size = 2.6, colour = "#e34948", min.segment.length = 0, seed = 1) +
-    facet_wrap(~variable, scales = "free_y", nrow = 1) +
+    ggrepel::geom_text_repel(data = FL[deprived == TRUE], aes(label = osiedle), size = 3.6, colour = "#c73a39", min.segment.length = 0, seed = 1) +
+    facet_wrap(~variable, scales = "free_y", nrow = 2) +
     scale_colour_manual(values = c(`TRUE` = "#e34948", `FALSE` = "#8f8d86"), labels = c(`TRUE` = "Most deprived third", `FALSE` = "Other"), name = NULL) +
-    scale_size_area(max_size = 4, guide = "none") + labs(x = "Distance from the Old Market Square (km, median of the osiedle's complexes)", y = NULL) +
-    theme_minimal(base_size = 10) + theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.text = element_text(face = "bold"))
-  ggsave(file.path(fig, "Fig_periphery.png"), g, width = 12, height = 4.2, dpi = 200, bg = "white")
+    scale_size_area(max_size = 5, guide = "none") + labs(x = "Distance from the Old Market Square (km, median of the osiedle's complexes)", y = NULL) +
+    theme_minimal(base_size = 12.5) + theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.text = element_text(face = "bold", size = 12.5),
+                                            legend.text = element_text(size = 12.5), axis.text = element_text(size = 11.5))
+  ggsave(file.path(fig, "Fig_periphery.png"), g, width = 7.6, height = 7, dpi = 300, bg = "white")
   cat("\nSaved periphery_stops.csv, periphery_osiedla.csv, periphery_tests.csv, Fig_periphery.png\n")
 })
 
@@ -1782,13 +1798,13 @@ section("83", "Meeting places: who arrives at the stops", {
 
 ## ── 81 · Map: two streams on the network ───────────────────────────────────────────────────────────────────
 section("81", "Map: two streams on the network", {
-  ## Figure 8. (a) Riding: corridors (undirected stop-to-stop segments) coloured by which group rides them; each
+  ## Figure 6. (a) Riding: corridors (undirected stop-to-stop segments) coloured by which group rides them; each
   ## third's ride-km is scaled to its own total, and the colour is the most deprived third's part of the two scaled
   ## shares (blue: mainly the least deprived third; red: the most deprived third; grey: both in proportion); width:
   ## the mean of the two scaled shares. (b) Getting off (section 83): each complex coloured in the same way by the
   ## two thirds' arrivals and sized by the mean of their scaled shares. (c) Axial roses: each group's weekday ride-km
   ## by compass direction of the segments (15-degree sectors, drawn symmetrically).
-  ## Figure 9: the indices on the lines (section 79) and where riders get off (section 83) against the same flows
+  ## Figure 7: the indices on the lines (section 79) and where riders get off (section 83) against the same flows
   ## with the scores scattered at random (sections 80, 83) and with the map turned or mirrored (sections 82, 83).
   ## The weekday offer and the weekend look almost the same as (a); they are drawn in a separate figure.
   ## Inputs: segregation_network_corridors.csv (79), segregation_benchmark.csv (80), segregation_rotation_summary.csv (82),
@@ -1818,19 +1834,19 @@ section("81", "Map: two streams on the network", {
     ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
       geom_segment(data = d[wd >= mn][order(wd)], aes(X1, Y1, xend = X2, yend = Y2, colour = comp, linewidth = pmin(wd, mx)), lineend = "round") +
       COMP + scale_linewidth(range = c(0.15, 2.8), limits = c(mn, mx), guide = "none") +
-      ms_labels(L, LAB, size = 3.3) + ms_centre(L) + zoom + labs(title = title) + theme_ms(10.5)
+      ms_labels(L, LAB, size = 4.1) + ms_centre(L) + zoom + labs(title = title) + theme_ms(13)
   }
-  pa <- mp(P$a, "Riding") + ms_scalebar(Lz)
+  pa <- mp(P$a, "Riding") + ms_scalebar(Lz, km = 4, text = 1.6)
   pb <- mp(P$b, "Offered, weekdays") + ms_scalebar(Lz)
   pc <- mp(P$c, "Riding, weekends")
   ## (b) getting off: weekday arrivals at each complex
   MS <- fread(file.path(s2, "meeting_stops.csv"), encoding = "UTF-8")[window == "weekday" & wd >= 0.0015]
   pm <- ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
     geom_point(data = MS[order(-wd)], aes(X, Y, size = wd, fill = comp), shape = 21, colour = "#ffffff", stroke = 0.4) +
-    geom_text_repel(data = MS[order(-wd)][1:12], aes(X, Y, label = d), size = 3.1, colour = MSTY$ink, bg.colour = "#ffffff", bg.r = 0.12, min.segment.length = 0, segment.size = 0.25,
+    geom_text_repel(data = MS[order(-wd)][1:12], aes(X, Y, label = d), size = 3.8, colour = MSTY$ink, bg.colour = "#ffffff", bg.r = 0.12, min.segment.length = 0, segment.size = 0.25,
                     box.padding = 0.35, max.overlaps = 30, seed = 83) +
     scale_fill_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), guide = "none") +
-    scale_size_area(max_size = 8, guide = "none") + ms_centre(L) + zoom + labs(title = "Getting off") + theme_ms(10.5)
+    scale_size_area(max_size = 8, guide = "none") + ms_centre(L) + zoom + labs(title = "Getting off") + theme_ms(13)
   ## (c) axial roses: compass bearing of each segment (0 = north-south, 90 = east-west), weekday ride-km shares
   R <- KC[win == "weekday", .(th, most = most_obs / sum(most_obs), least = least_obs / sum(least_obs))]
   R[, brg := ((90 - th * 180 / pi) %% 180)]
@@ -1842,8 +1858,8 @@ section("81", "Map: two streams on the network", {
     coord_polar(start = 0, direction = 1) + scale_x_continuous(limits = c(0, 360), breaks = c(0, 90, 180, 270), labels = c("N", "E", "S", "W")) +
     scale_fill_manual(values = c("Least deprived third" = MSTY$least, "Most deprived third" = MSTY$most), guide = "none") +
     labs(title = "Direction of ride-km", x = NULL, y = NULL) +
-    theme_minimal(base_size = 10.5) + theme(axis.text.y = element_blank(), panel.grid.minor = element_blank(), strip.text = element_text(size = 10, colour = MSTY$ink),
-                                            plot.title = element_text(size = 10.5, hjust = 0.5, colour = MSTY$ink), plot.background = element_rect(fill = "#ffffff", colour = NA))
+    theme_minimal(base_size = 13) + theme(axis.text.y = element_blank(), panel.grid.minor = element_blank(), strip.text = element_text(size = 12.5, colour = MSTY$ink),
+                                            plot.title = element_text(size = 13, hjust = 0.5, colour = MSTY$ink), plot.background = element_rect(fill = "#ffffff", colour = NA))
   ## (d) benchmarks (weekdays): scattered scores (95% of 999 allocations) and turned or mirrored maps (all 47)
   LBL <- data.table(block = c(rep("lines", 7), rep("stops", 4)),
                     measure = c("overlap_corridor", "eta2_corridor", "eta2_vehicle", "niso_most_vehicle", "niso_least_vehicle", "rel_exp_least_to_most_vehicle",
@@ -1862,7 +1878,7 @@ section("81", "Map: two streams on the network", {
   BB <- merge(LBL, rbind(LN, ST), by = c("block", "measure"))
   if (nrow(BB) != nrow(LBL)) stop("benchmark measures missing")
   BB[, `:=`(ptxt = fifelse(p == 0, "< 0.001", sprintf(fifelse(p < 0.01, "%.3f", "%.2f"), p)), ktxt = sprintf("%d of %d", k, n))]
-  dy <- 0.17; xp <- 1.04; xk <- 1.24
+  dy <- 0.17; xp <- 1.04; xk <- 1.36
   pe <- ggplot(BB) +
     geom_vline(xintercept = 0, colour = "#bdbab2", linewidth = 0.3) +
     geom_segment(aes(x = s_lo, xend = s_hi, y = y + dy, yend = y + dy), linewidth = 2.6, colour = "#dcdad3", lineend = "round") +
@@ -1870,20 +1886,20 @@ section("81", "Map: two streams on the network", {
     geom_point(aes(s_mean, y + dy), shape = 21, size = 1.9, fill = "#ffffff", colour = "#8a877f", stroke = 0.6) +
     geom_point(aes(t_mean, y - dy), shape = 21, size = 1.9, fill = "#ffffff", colour = "#6f6c65", stroke = 0.6) +
     geom_segment(aes(x = observed, xend = observed, y = y - 0.34, yend = y + 0.34), colour = MSTY$ink, linewidth = 1) +
-    geom_text(aes(x = xp, y = y, label = ptxt), hjust = 0, size = 2.8, colour = MSTY$ink) +
-    geom_text(aes(x = xk, y = y, label = ktxt), hjust = 0, size = 2.8, colour = MSTY$ink) +
-    annotate("text", x = -0.22, y = c(14.15, 5.15), label = c("On the lines", "Where riders get off"), hjust = 0, size = 3.1, fontface = "bold", colour = MSTY$ink) +
-    annotate("text", x = c(xp, xk), y = 14.15, label = c("p,\nscattered", "turned maps\nas separated"), hjust = 0, size = 2.6, colour = "#5f5c55", lineheight = 0.9) +
-    scale_x_continuous(limits = c(-0.22, 1.5), breaks = seq(-0.2, 1, 0.2)) +
+    geom_text(aes(x = xp, y = y, label = ptxt), hjust = 0, size = 3.6, colour = MSTY$ink) +
+    geom_text(aes(x = xk, y = y, label = ktxt), hjust = 0, size = 3.6, colour = MSTY$ink) +
+    annotate("text", x = -0.22, y = c(14.15, 5.15), label = c("On the lines", "Where riders get off"), hjust = 0, size = 3.9, fontface = "bold", colour = MSTY$ink) +
+    annotate("text", x = c(xp, xk), y = 14.15, label = c("p,\nscattered", "turned maps\nas separated"), hjust = 0, size = 3.2, colour = "#5f5c55", lineheight = 0.9) +
+    scale_x_continuous(limits = c(-0.22, 1.66), breaks = seq(-0.2, 1, 0.2)) +
     scale_y_continuous(breaks = BB$y, labels = BB$lab, limits = c(0.5, 14.7), expand = c(0, 0)) +
     labs(x = NULL, y = NULL) +
-    theme_minimal(base_size = 9.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), axis.text.y = element_text(size = 8.6, colour = MSTY$ink),
+    theme_minimal(base_size = 11.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), axis.text.y = element_text(size = 11, colour = MSTY$ink),
                                             plot.background = element_rect(fill = "#ffffff", colour = NA))
-  tg <- theme(plot.tag = element_text(face = "bold", size = 11.5))
+  tg <- theme(plot.tag = element_text(face = "bold", size = 14))
   maps <- (pa + labs(tag = "a") + tg | pm + labs(tag = "b") + tg) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
-  g <- wrap_elements(full = maps) / wrap_elements(full = pd + labs(tag = "c") + tg) + plot_layout(heights = c(1.75, 0.72))
-  ggsave(file.path(fig, "Fig_two_streams.png"), g, width = 9.4, height = 9.3, dpi = 270, bg = "#ffffff")
-  ggsave(file.path(fig, "Fig_sharing_benchmark.png"), pe, width = 7.2, height = 5.9, dpi = 260, bg = "#ffffff")
+  g <- wrap_elements(full = maps) / wrap_elements(full = pd + labs(tag = "c") + tg) + plot_layout(heights = c(1.75, 0.95))
+  ggsave(file.path(fig, "Fig_two_streams.png"), g, width = 8.2, height = 9.2, dpi = 300, bg = "#ffffff")
+  ggsave(file.path(fig, "Fig_sharing_benchmark.png"), pe, width = 7.2, height = 6.8, dpi = 300, bg = "#ffffff")
   g2 <- (pb | pc) + plot_annotation(tag_levels = "a") + plot_layout(guides = "collect") & theme(legend.position = "bottom")
   ggsave(file.path(fig, "Fig_two_streams_offer_weekend.png"), g2, width = 11, height = 6.6, dpi = 220, bg = "#ffffff")
   cat("Saved Fig_two_streams.png, Fig_sharing_benchmark.png, Fig_two_streams_offer_weekend.png\n")
