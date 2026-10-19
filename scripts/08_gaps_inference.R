@@ -1,8 +1,8 @@
 ## DualPulse | stage 8: The 22 gaps: decomposition, inference and checks
 ##
 ## Slopes of every measure on deprivation raw, net of position and net of land use and population, their
-## decomposition and small-cluster inference, and the checks built on them (main text 3.5, supplementary
-## S7, S8, S10, S11).
+## decomposition and small-cluster inference, and the checks built on them (main text 3.2-3.5, supplementary
+## S4-S6 and S8).
 ##
 ## Sections (named by the numbered scripts they replace, as in the project notes):
 ##   56      Gap ladder, decomposition and inference
@@ -24,6 +24,9 @@
 ##   82      Benchmark: the same deprivation map turned around the centre
 ##   83      Meeting places: who arrives at the stops
 ##   81      Map: two streams on the network
+##   84      Offer weighting: periods by departures or by boardings
+##   85      The periphery: usage and the link to the centre
+##   86      Supplement tables: sharing, re-allocations and the periphery
 ##
 ## Run from the repository root: Rscript run.R 8   (one section: Rscript run.R 8:73)
 
@@ -143,7 +146,7 @@ section("56", "Gap ladder, decomposition and inference", {
             "bridge", "irregularity", "dependence", "weather_rain", "night_vs_day"),
     dim = rep(c("How much and when", "Where to", "Routes and transfers", "Access by the timetable", "Responses"), c(6, 4, 4, 3, 5)),
     label = c("Volume per departure", "Tidal index (morning boarding share)", "Boardings before 06:00", "Morning-peak concentration", "Saturday ratio", "Summer ratio",
-              "Ride length (km)", "Deprivation of destinations (z)", "Alighting near the centre (%)", "Alighting in own osiedle (%)",
+              "Ride length (km)", "Deprivation of destinations (z)", "Alighting near the centre (%)", "Alighting in own neighbourhood (%)",
               "Effective number of destinations", "Directional concentration (0-1)", "Alighting at interchanges (%)", "Connections per 100 rides",
               "City jobs within 30 min (%)", "Transfers to jobs", "Time to the centre (min)",
               "Bridge days (log ratio)", "Day-to-day irregularity", "Riders kept when service is cut", "Rain (log riders per departure)", "Night relative to day volume"))
@@ -432,7 +435,7 @@ section("55", "The extremes of deprivation", {
   LAB <- c(volume = "Usage: volume per departure", tidal = "Usage: tidal index", onset_b = "Usage: early boardings (before 06:00)",
            conc_b = "Usage: morning-peak concentration", sat_b = "Usage: Saturday ratio", summer = "Usage: summer ratio",
            ride_km = "Destinations: ride length", dest_dep = "Destinations: deprivation", to_centre = "Destinations: share to the centre",
-           same_osiedle = "Destinations: share in own osiedle", eff_dest = "Routes: effective destinations", dir_conc = "Routes: directional concentration",
+           same_osiedle = "Destinations: share in own neighbourhood", eff_dest = "Routes: effective destinations", dir_conc = "Routes: directional concentration",
            jobs30 = "Access: jobs within 30 min", transfers_jobs = "Access: transfers to jobs", t_centre = "Access: time to the centre",
            bridge = "Responses: bridge days", irregularity = "Responses: day-to-day irregularity", dependence = "Responses: riders kept when service is cut",
            weather_rain = "Responses: rain", night_vs_day = "Responses: night vs day")
@@ -982,7 +985,7 @@ section("74", "Offer and use: what the network offers and how riders use it", {
   s2 <- file.path(out_dir, "output/stage2"); fig <- file.path(out_dir, "output/figures")
   X <- readRDS(file.path(s2, "gap_stops.rds"))
   K <- c(ride_km = "Ride length", dest_dep = "Deprivation of destinations", to_centre = "Share carried to the centre",
-         same_osiedle = "Share within the origin's osiedle", hub = "Share alighting at interchanges", office = "Office floor at destinations",
+         same_osiedle = "Share within the origin's neighbourhood", hub = "Share alighting at interchanges", office = "Office floor at destinations",
          eff_dest = "Effective destinations", dir_conc = "Directional concentration", spread_km = "Spread of destinations")
   DM <- fread(file.path(s2, "dest_mech_profiles.csv"), encoding = "UTF-8")[transfers == "none" & comp %in% c("observed", "network")]
   DM[, win := fcase(window == "weekday all day", "weekday", window == "weekday morning peak (06-09)", "morning peak")]
@@ -1164,7 +1167,7 @@ section("75", "Peripheral deprivation: what the network offers deprived areas fa
     ggrepel::geom_text_repel(data = FL[deprived == TRUE], aes(label = osiedle), size = 3.6, colour = "#c73a39", min.segment.length = 0, seed = 1) +
     facet_wrap(~variable, scales = "free_y", nrow = 2) +
     scale_colour_manual(values = c(`TRUE` = "#e34948", `FALSE` = "#8f8d86"), labels = c(`TRUE` = "Most deprived third", `FALSE` = "Other"), name = NULL) +
-    scale_size_area(max_size = 5, guide = "none") + labs(x = "Distance from the Old Market Square (km, median of the osiedle's complexes)", y = NULL) +
+    scale_size_area(max_size = 5, guide = "none") + labs(x = "Distance from the Old Market Square (km, median of the neighbourhood's complexes)", y = NULL) +
     theme_minimal(base_size = 12.5) + theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.text = element_text(face = "bold", size = 12.5),
                                             legend.text = element_text(size = 12.5), axis.text = element_text(size = 11.5))
   ggsave(file.path(fig, "Fig_periphery.png"), g, width = 7.6, height = 7, dpi = 300, bg = "white")
@@ -1903,4 +1906,140 @@ section("81", "Map: two streams on the network", {
   g2 <- (pb | pc) + plot_annotation(tag_levels = "a") + plot_layout(guides = "collect") & theme(legend.position = "bottom")
   ggsave(file.path(fig, "Fig_two_streams_offer_weekend.png"), g2, width = 11, height = 6.6, dpi = 220, bg = "#ffffff")
   cat("Saved Fig_two_streams.png, Fig_sharing_benchmark.png, Fig_two_streams_offer_weekend.png\n")
+})
+
+
+## ── 84 · Offer weighting: periods by departures or by boardings ───────────────────────────────────────────
+section("84", "Offer weighting: periods by departures or by boardings", {
+  ## The offer of section 46 ("network" in dest_mech_profiles.csv) spreads each stop's riders over its lines,
+  ## directions and periods of the day in proportion to departures, so it also differs from the observed flows in
+  ## when riders board. The "timing_kept" offer keeps each period's boardings and spreads them over the lines and
+  ## directions only. This check compares the two across origins (main text 2.3: r >= 0.997), and the slopes on
+  ## deprivation of each and of the use parts, in SD of the observed measure. Weekdays, transfers not followed.
+  ## Inputs: gap_stops.rds (56), dest_mech_profiles.csv (46). Output: output/stage2/offer_timing_check.csv
+
+  suppressPackageStartupMessages(library(data.table))
+  s2 <- file.path(ROOT, "output/stage2")
+  X <- readRDS(file.path(s2, "gap_stops.rds"))[, .(stop_name, dz = (dep - mean(dep)) / sd(dep))]
+  P <- fread(file.path(s2, "dest_mech_profiles.csv"), encoding = "UTF-8")[transfers == "none" & window == "weekday all day"]
+  ms <- c("ride_km", "dest_dep", "office", "to_centre", "same_osiedle", "hub")
+  out <- rbindlist(lapply(ms, function(m) {
+    W <- dcast(P, stop_name ~ comp, value.var = m)
+    Z <- merge(X, W, by = "stop_name")[complete.cases(observed, network, timing_kept)]
+    Z[, dz := (dz - mean(dz)) / sd(dz)]
+    s <- sd(Z$observed); b <- function(y) unname(coef(lm(y / s ~ Z$dz))[2]); r2 <- function(y) summary(lm(Z$observed ~ y))$r.squared
+    data.table(measure = m, origins = nrow(Z), slope_observed = b(Z$observed), slope_offer = b(Z$network), slope_offer_timing_kept = b(Z$timing_kept),
+               slope_use = b(Z$observed - Z$network), slope_use_timing_kept = b(Z$observed - Z$timing_kept), slope_timing_part = b(Z$timing_kept - Z$network),
+               r2_offer = r2(Z$network), r2_offer_timing_kept = r2(Z$timing_kept), r_offers = cor(Z$network, Z$timing_kept))
+  }))
+  fwrite(out, file.path(s2, "offer_timing_check.csv"))
+  print(out[, lapply(.SD, function(v) if (is.numeric(v)) round(v, 3) else v)])
+  cat(sprintf("Correlation of the two offers across origins: %.3f to %.3f\nSaved offer_timing_check.csv\n", min(out$r_offers), max(out$r_offers)))
+})
+
+## ── 85 · The periphery: usage and the link to the centre ──────────────────────────────────────────────────
+section("85", "The periphery: usage and the link to the centre", {
+  ## Extends section 75 from what the network offers to all 22 measures and the use part of destination
+  ## deprivation (observed minus offered): the deprived neighbourhoods beyond 5 km against every choice of as many
+  ## of the peripheral neighbourhoods (exact randomisation, as in section 75), each neighbourhood summarised by the
+  ## median over its compared stops beyond 5 km. Also counts the neighbourhoods with any stop on a line to the
+  ## centre (direct_centre > 0). Main text 3.2 and 3.5; supplementary Table S6.
+  ## Inputs: gap_stops.rds (56), dest_mech_profiles.csv (46), periphery_osiedla.csv (75).
+  ## Output: output/stage2/periphery_usage_tests.csv
+
+  suppressPackageStartupMessages(library(data.table))
+  s2 <- file.path(ROOT, "output/stage2")
+  X <- readRDS(file.path(s2, "gap_stops.rds"))
+  DP <- dcast(fread(file.path(s2, "dest_mech_profiles.csv"), encoding = "UTF-8")[transfers == "none" & window == "weekday all day" & comp %in% c("observed", "network")],
+              stop_name ~ comp, value.var = "dest_dep")[, .(stop_name, dest_use = observed - network)]
+  X <- merge(X, DP, by = "stop_name", all.x = TRUE)
+  PO <- fread(file.path(s2, "periphery_osiedla.csv"), encoding = "UTF-8")[km == 5 & area == "all", .(osiedle, deprived)]
+  P <- merge(X[dist_km > 5], PO, by = "osiedle")
+  ms <- c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "ride_km", "dest_dep", "dest_use", "to_centre", "same_osiedle", "hub_share",
+          "conn_100", "eff_dest", "dir_conc", "jobs30", "transfers_jobs", "t_centre", "bridge", "dependence", "irregularity", "night_vs_day", "weather_rain",
+          "direct_centre")
+  out <- rbindlist(lapply(ms, function(m) {
+    O <- P[!is.na(get(m)), .(v = median(get(m)), any = any(get(m) > 0), deprived = deprived[1]), by = osiedle]
+    k <- O[deprived == TRUE, .N]; n <- nrow(O)
+    if (k < 3) return(NULL)
+    obs <- O[deprived == TRUE, mean(v)] - O[deprived == FALSE, mean(v)]
+    d <- apply(combn(n, k), 2, function(i) mean(O$v[i]) - mean(O$v[-i]))
+    data.table(measure = m, deprived_osiedla = k, osiedla = n, deprived = O[deprived == TRUE, mean(v)], other = O[deprived == FALSE, mean(v)],
+               diff = obs, sd_units = obs / sd(O$v), p_exact = mean(abs(d) >= abs(obs) - 1e-12),
+               any_deprived = O[deprived == TRUE, sum(any)], any_other = O[deprived == FALSE, sum(any)])
+  }))
+  fwrite(out, file.path(s2, "periphery_usage_tests.csv"))
+  print(out[, lapply(.SD, function(v) if (is.numeric(v)) signif(v, 3) else v)])
+  cat("Saved periphery_usage_tests.csv\n")
+})
+
+## ── 86 · Supplement tables: sharing, re-allocations and the periphery ─────────────────────────────────────
+section("86", "Supplement tables: sharing, re-allocations and the periphery", {
+  ## Assembles the rows of supplementary Tables S4 (sharing the network: observed, offer, weekend and morning peak,
+  ## against the scattered and turned benchmarks), S5 (re-allocations) and S6 (the periphery) from the outputs of
+  ## sections 67, 75, 79, 80, 82, 83 and 85, as CSV and as LaTeX rows. Net isolation is (I - P) / (1 - P) and
+  ## relative exposure E / P (main text, Eq. 3).
+  ## Outputs: output/supplement/supp_sharing.csv|.tex, supp_realloc.csv|.tex, supp_periphery.csv|.tex
+
+  suppressPackageStartupMessages(library(data.table))
+  s2 <- file.path(ROOT, "output/stage2"); od <- file.path(ROOT, "output/supplement"); dir.create(od, showWarnings = FALSE)
+  f2 <- function(v, d = 2) ifelse(is.na(v), "--", gsub("-", "$-$", formatC(v, format = "f", digits = d), fixed = TRUE))
+  fp <- function(p) ifelse(is.na(p), "--", ifelse(p < 0.001, "<0.001", formatC(p, format = "f", digits = 3)))
+  ## Table S4: sharing
+  N <- fread(file.path(s2, "segregation_network.csv"))
+  W <- c(wd = "weekday all day", am = "weekday morning peak (06-09)", we = "weekend all day")
+  gl <- function(ly, m, w) { v <- N[layer == ly & measure == m & window == W[[w]], est]; if (length(v)) v[1] else NA_real_ }
+  niso <- function(ly, who, w) { i <- gl(ly, paste0("iso_", who, "_vehicle"), w); p <- gl(ly, paste0("share_", who), w); (i - p) / (1 - p) }
+  relx <- function(ly, w) gl(ly, "exp_least_to_most_vehicle", w) / gl(ly, "share_most", w)
+  ewd <- function(ly, w) gl(ly, "ew_share_most", w) - gl(ly, "ew_share_least", w)
+  B <- fread(file.path(s2, "segregation_benchmark.csv")); R <- fread(file.path(s2, "segregation_rotation_summary.csv")); M <- fread(file.path(s2, "meeting_benchmark.csv"))
+  bp <- function(m) B[window == "weekday" & measure == m, p_at_least_as_sorted]; bm <- function(m) R[window == "weekday" & measure == m, maps_at_least_as_sorted]
+  mw <- function(m, w = "weekday") M[window == w & measure == m, observed]
+  mp <- function(m) M[window == "weekday" & measure == m, p_scattered]; mm <- function(m) M[window == "weekday" & measure == m, maps_as_separated]
+  S <- rbindlist(list(
+    data.table(scale = "lines", measure = "Isolation of the least deprived third, net of group size", observed = niso("obs", "least", "wd"), offer = niso("off", "least", "wd"), weekend = niso("obs", "least", "we"), morning_peak = niso("obs", "least", "am"), p_scattered = bp("niso_least_vehicle"), turned_maps = bm("niso_least_vehicle")),
+    data.table(scale = "lines", measure = "Isolation of the most deprived third, net of group size", observed = niso("obs", "most", "wd"), offer = niso("off", "most", "wd"), weekend = niso("obs", "most", "we"), morning_peak = niso("obs", "most", "am"), p_scattered = bp("niso_most_vehicle"), turned_maps = bm("niso_most_vehicle")),
+    data.table(scale = "lines", measure = "Exposure of the least to the most deprived third, relative", observed = relx("obs", "wd"), offer = relx("off", "wd"), weekend = relx("obs", "we"), morning_peak = relx("obs", "am"), p_scattered = bp("rel_exp_least_to_most_vehicle"), turned_maps = bm("rel_exp_least_to_most_vehicle")),
+    data.table(scale = "lines", measure = "Variance ratio of riders' deprivation", observed = gl("obs", "eta2_vehicle", "wd"), offer = gl("off", "eta2_vehicle", "wd"), weekend = gl("obs", "eta2_vehicle", "we"), morning_peak = gl("obs", "eta2_vehicle", "am"), p_scattered = bp("eta2_vehicle"), turned_maps = bm("eta2_vehicle")),
+    data.table(scale = "corridors", measure = "Overlap of the two thirds' ride-kilometres", observed = gl("obs", "overlap_corridor", "wd"), offer = gl("off", "overlap_corridor", "wd"), weekend = gl("obs", "overlap_corridor", "we"), morning_peak = gl("obs", "overlap_corridor", "am"), p_scattered = bp("overlap_corridor"), turned_maps = bm("overlap_corridor")),
+    data.table(scale = "corridors", measure = "West--east share, most deprived third", observed = gl("obs", "ew_share_most", "wd"), offer = gl("off", "ew_share_most", "wd"), weekend = gl("obs", "ew_share_most", "we"), morning_peak = gl("obs", "ew_share_most", "am"), p_scattered = NA_real_, turned_maps = NA_integer_),
+    data.table(scale = "corridors", measure = "West--east share, least deprived third", observed = gl("obs", "ew_share_least", "wd"), offer = gl("off", "ew_share_least", "wd"), weekend = gl("obs", "ew_share_least", "we"), morning_peak = gl("obs", "ew_share_least", "am"), p_scattered = NA_real_, turned_maps = NA_integer_),
+    data.table(scale = "corridors", measure = "West--east difference (most minus least)", observed = ewd("obs", "wd"), offer = ewd("off", "wd"), weekend = ewd("obs", "we"), morning_peak = ewd("obs", "am"), p_scattered = bp("ew_most_minus_least"), turned_maps = bm("ew_most_minus_least")),
+    data.table(scale = "corridors", measure = "Variance ratio of riders' deprivation", observed = gl("obs", "eta2_corridor", "wd"), offer = gl("off", "eta2_corridor", "wd"), weekend = gl("obs", "eta2_corridor", "we"), morning_peak = gl("obs", "eta2_corridor", "am"), p_scattered = bp("eta2_corridor"), turned_maps = bm("eta2_corridor")),
+    data.table(scale = "stops", measure = "Overlap of the two thirds' arrivals", observed = mw("overlap_stop"), offer = NA_real_, weekend = mw("overlap_stop", "weekend"), morning_peak = NA_real_, p_scattered = mp("overlap_stop"), turned_maps = mm("overlap_stop")),
+    data.table(scale = "stops", measure = "Isolation of the least deprived third, net of group size", observed = mw("niso_least_stop_period"), offer = NA_real_, weekend = mw("niso_least_stop_period", "weekend"), morning_peak = NA_real_, p_scattered = mp("niso_least_stop_period"), turned_maps = mm("niso_least_stop_period")),
+    data.table(scale = "stops", measure = "Isolation of the most deprived third, net of group size", observed = mw("niso_most_stop_period"), offer = NA_real_, weekend = mw("niso_most_stop_period", "weekend"), morning_peak = NA_real_, p_scattered = mp("niso_most_stop_period"), turned_maps = mm("niso_most_stop_period")),
+    data.table(scale = "stops", measure = "Exposure of the least to the most deprived third, relative", observed = mw("rel_exp_least_to_most_stop_period"), offer = NA_real_, weekend = mw("rel_exp_least_to_most_stop_period", "weekend"), morning_peak = NA_real_, p_scattered = mp("rel_exp_least_to_most_stop_period"), turned_maps = mm("rel_exp_least_to_most_stop_period"))))
+  fwrite(S, file.path(od, "supp_sharing.csv"))
+  writeLines(S[, sprintf("%s & %s & %s & %s & %s & %s & %s \\\\", measure, f2(observed), f2(offer), f2(weekend), f2(morning_peak), fp(p_scattered),
+                         ifelse(is.na(turned_maps), "--", paste0(turned_maps, "/47")))], file.path(od, "supp_sharing.tex"), useBytes = TRUE)
+  ## Table S5: re-allocations
+  CF <- fread(file.path(s2, "counterfactual_allocations.csv"))[msr %in% c("dist_km", "jobs30", "t_centre", "transfers_jobs", "ride_km", "conn_100", "dest_dep")]
+  CF <- CF[match(c("dist_km", "jobs30", "t_centre", "transfers_jobs", "ride_km", "conn_100", "dest_dep"), msr)]
+  fwrite(CF, file.path(od, "supp_realloc.csv"))
+  writeLines(CF[, sprintf("%s & %s & %s & %s & %s & %s & %s & %s to %s \\\\", label, f2(obs_least), f2(obs_most), f2(observed), f2(mir_least), f2(mir_most), f2(mirror), f2(random_lo), f2(random_hi))],
+             file.path(od, "supp_realloc.tex"), useBytes = TRUE)
+  ## Table S6: the periphery
+  PT <- fread(file.path(s2, "periphery_tests.csv"))[area == "all" & check == "main"]
+  PU <- fread(file.path(s2, "periphery_usage_tests.csv"))
+  pr <- function(m, d, o, df, p, k, n) sprintf("%s & %s & %s & %s & %s & %d/%d \\\\", m, f2(d), f2(o), f2(df), fp(p), as.integer(k), as.integer(n))
+  T6 <- rbind(PT[km == 5 & msr %in% c("jobs30", "t_centre", "transfers_jobs", "ride_km_network", "eff_dest_network", "dest_dep_network"), .(block = "offer, beyond 5 km", measure = msr, deprived, other, diff, p_exact, deprived_osiedla, osiedla)],
+              PT[km == 6 & msr == "jobs30", .(block = "offer, beyond 6 km", measure = msr, deprived, other, diff, p_exact, deprived_osiedla, osiedla)],
+              PU[measure %in% c("to_centre", "hub_share", "conn_100", "dest_use"), .(block = "carried and connections", measure, deprived, other, diff, p_exact, deprived_osiedla, osiedla)],
+              PU[measure %in% c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "night_vs_day", "bridge", "irregularity", "dependence", "weather_rain"),
+                 .(block = "how much, when, responses", measure, deprived, other, diff, p_exact, deprived_osiedla, osiedla)])
+  lab <- c(jobs30 = "City jobs within 30 min (\\%)", t_centre = "Time to the centre (min)", transfers_jobs = "Transfers to jobs", ride_km_network = "Ride length offered (km)",
+           eff_dest_network = "Effective destinations offered", dest_dep_network = "Destination deprivation offered (z)", to_centre = "Rides ending within 1.5\\,km of the centre (\\%)",
+           hub_share = "Alighting at interchanges (\\%)", conn_100 = "Connections per 100 rides", dest_use = "Destination deprivation, use part (z)",
+           volume = "Volume per departure (index)", tidal = "Tidal index", onset_b = "Boardings before 06:00 (index)", conc_b = "Morning-peak concentration (index)",
+           sat_b = "Saturday ratio (index)", summer = "Summer ratio (index)", night_vs_day = "Night relative to day volume", bridge = "Bridge days (log ratio)",
+           irregularity = "Day-to-day irregularity", dependence = "Riders kept when service is cut", weather_rain = "Rain (log riders per departure)")
+  ord <- c("jobs30", "t_centre", "transfers_jobs", "ride_km_network", "eff_dest_network", "dest_dep_network", "to_centre", "hub_share", "conn_100", "dest_use",
+           "volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "night_vs_day", "bridge", "irregularity", "dependence", "weather_rain")
+  T6[, o := match(measure, ord) + (block == "offer, beyond 6 km") * 5.5][, label := lab[measure]]
+  T6[block == "offer, beyond 6 km", label := paste0(label, ", beyond 6\\,km")]
+  setorder(T6, o)[, o := NULL]
+  fwrite(T6, file.path(od, "supp_periphery.csv"))
+  writeLines(T6[, pr(label, deprived, other, diff, p_exact, deprived_osiedla, osiedla)], file.path(od, "supp_periphery.tex"), useBytes = TRUE)
+  cat("Saved supp_sharing, supp_realloc and supp_periphery (.csv, .tex) in output/supplement\n")
 })

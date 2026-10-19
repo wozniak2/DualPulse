@@ -149,7 +149,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
     labs(subtitle = "Walking catchments (nearest pole, up to 400 m)") + mth)
   p_res <- function(W) zoom(W, ggplot() + geom_sf(data = W$vc, fill = "#f6f5f2", colour = "#c9c7c0", linewidth = 0.3) + os_lines(W) +
     geom_sf(data = W$pp[order(W$pp$pop), ], aes(size = pop, fill = dep), colour = "#9d9b94", stroke = 0.15, shape = 21) + sscale + dscale +
-    labs(subtitle = "Residents, coloured by their osiedle's score") + mth)
+    labs(subtitle = "Residents, coloured by their neighbourhood's score") + mth)
   p_cdep <- function(W, lab = 2) zoom(W, ggplot() + geom_sf(data = W$vc, aes(fill = cdep), colour = "#ffffff", linewidth = 0.5) + dscale + os_lines(W) + pole_pts(W) +
     geom_sf_label(data = W$lab, aes(label = fmt1(cdep)), size = lab, colour = ink, fill = "#ffffff", alpha = 0.8, linewidth = 0, label.padding = unit(0.08, "lines")) +
     labs(subtitle = "Catchment deprivation: residents' mean") + mth)
@@ -180,7 +180,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   pl <- ggplot(mc, aes(os_dep, 100 * muni_share)) + geom_hline(yintercept = 0, colour = "#c3c2b7") +
     geom_point(shape = 16, size = 1.1, alpha = 0.45, colour = "#4a3aa7", position = position_jitter(width = 0.03, height = 0, seed = 1)) +
     scale_y_sqrt(breaks = c(0, 1, 5, 10, 25, 50, 100)) + scale_x_continuous(breaks = -1:2) +
-    labs(x = "Deprivation score of the catchment's main osiedle", y = "Residents in municipal\nbuildings (%, square-root scale)", subtitle = "Variation within osiedla") +
+    labs(x = "Deprivation score of the catchment's main neighbourhood", y = "Residents in municipal\nbuildings (%, square-root scale)", subtitle = "Variation within neighbourhoods") +
     theme_minimal(base_size = 9.5) + theme(panel.grid.minor = element_blank(), plot.subtitle = element_text(colour = ink, size = 8.5, hjust = 0.5, margin = margin(b = 3)),
                                            axis.title = element_text(colour = ink2, size = 8), axis.text = element_text(colour = ink2, size = 7.5), plot.tag = element_text(face = "bold"))
   f <- (pa + pb + pc) / (pd + pe + pf) / (pg + ph + pi) / (pj + pk + pl) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
@@ -195,7 +195,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   mark <- list(geom_sf(data = W3$line, colour = ink, linewidth = 0.5),
                annotate("label", x = W3$b[["xmax"]] + 250, y = W3$b[["ymax"]], label = "b, c", hjust = 0, vjust = 1, size = 4.4, colour = ink, fill = "#ffffff",
                         linewidth = 0, label.padding = unit(0.1, "lines")))
-  qa <- city_map("dep", "Deprivation score by osiedle") + mark
+  qa <- city_map("dep", "Deprivation score by neighbourhood") + mark
   qb <- p_catch(W3) + os_names(W3, 3.9) + labs(subtitle = "Walking catchments (up to 400 m)")
   qc <- p_cdep(W3, 3.3)
   qd <- all_stops() + ms_guides(1.75) + mark + labs(subtitle = "All stops, with rings and sectors") + mth
@@ -295,8 +295,8 @@ section("64", "Figure 8: the gaps and their parts", {
   ## Figure replacing the 22-row table of the gaps (main text): for every measure, the raw slope on
   ## deprivation (open circle), the parts of it accounted for by location, service at the stop, land use and
   ## population (stacked bars; Gelbach decomposition of script 56, primary specification), and the
-  ## remainder with its 95% CR2-Satterthwaite interval (black). Medians of the least and most deprived thirds
-  ## in natural units at the right. The full table moves to the supplement.
+  ## remainder with its 95% CR2-Satterthwaite interval (black). The full table, with the medians of the least
+  ## and most deprived thirds, moves to the supplement.
   ## Inputs: output/stage2/gap_decomposition.csv, gap_ladder.csv (script 56)
   ## Output: output/figures/Fig_decomposition.png
 
@@ -308,9 +308,9 @@ section("64", "Figure 8: the gaps and their parts", {
   lev <- c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "ride_km", "dest_dep", "to_centre", "same_osiedle", "eff_dest", "dir_conc", "hub_share", "conn_100",
            "jobs30", "transfers_jobs", "t_centre", "bridge", "irregularity", "dependence", "weather_rain", "night_vs_day")
   M <- M[match(lev, msr)]
-  fmt <- function(k, v) if (k %in% c("to_centre", "same_osiedle", "hub_share", "jobs30")) sprintf("%.0f", v) else if (k %in% c("ride_km", "eff_dest", "t_centre")) sprintf("%.1f", v) else sprintf("%.2f", v)
-  unit <- c(ride_km = " km", to_centre = "%", same_osiedle = "%", hub_share = "%", jobs30 = "%", t_centre = " min")
-  M[, nat := mapply(function(k, a, b) paste0(gsub("-", "\u2212", fmt(k, a)), " \u2192 ", gsub("-", "\u2212", fmt(k, b)), if (k %in% names(unit)) unit[[k]] else ""), msr, least, most)]
+  M[, label := sub("own osiedle", "own neighbourhood", label)]   # gap_ladder.csv written before the label change in section 56
+  wrap <- c("How much and when" = "How much\nand when", "Routes and transfers" = "Routes and\ntransfers", "Access by the timetable" = "Access by\nthe timetable")
+  M[dim %in% names(wrap), dim := wrap[dim]]
   M[, label := factor(label, levels = rev(label))][, dim := factor(dim, levels = unique(dim))]
   P <- merge(GB[part %in% c("location", "service", "landuse", "population")], M[, .(msr, label, dim)], by = "msr")
   P[, part := factor(part, levels = c("location", "service", "landuse", "population"), labels = c("Location", "Service at the stop", "Land use", "Population"))]
@@ -322,18 +322,17 @@ section("64", "Figure 8: the gaps and their parts", {
     geom_errorbarh(data = R, aes(xmin = lo, xmax = hi, y = label), height = 0, linewidth = 0.7, colour = "#1f1e1c") +
     geom_point(data = R, aes(est, label, shape = "Remainder (95% interval)"), size = 2.7, colour = "#1f1e1c", fill = "#1f1e1c") +
     geom_point(data = R, aes(raw, label, shape = "Raw gap"), size = 2.9, colour = "#1f1e1c", fill = "#ffffff", stroke = 0.6) +
-    geom_text(data = R, aes(x = xr[2] + 0.06, y = label, label = nat), hjust = 0, size = 3.7, colour = "#4a4945") +
     scale_shape_manual(values = c("Raw gap" = 21, "Remainder (95% interval)" = 18), name = NULL) +
     scale_fill_manual(values = pal, name = "Accounted for by") +
-    scale_x_continuous(limits = c(xr[1], xr[2] + 0.78), breaks = seq(-1, 1, 0.2)[seq(-1, 1, 0.2) >= xr[1] - 0.05 & seq(-1, 1, 0.2) <= xr[2] + 0.05]) +
+    scale_x_continuous(limits = xr, breaks = seq(-1, 1, 0.2)[seq(-1, 1, 0.2) >= xr[1] - 0.05 & seq(-1, 1, 0.2) <= xr[2] + 0.05]) +
     facet_grid(dim ~ ., scales = "free_y", space = "free_y", switch = "y") +
-    labs(x = "Slope on deprivation (SD per SD) and its parts", y = NULL) +
+    labs(x = "Slope on deprivation (SD per SD)", y = NULL) +
     guides(fill = guide_legend(order = 1, nrow = 2), shape = guide_legend(order = 2)) +
     theme_minimal(base_size = 12.5) +
-    theme(legend.position = "top", legend.box = "vertical", panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
+    theme(legend.position = "top", legend.location = "plot", legend.box = "vertical", plot.margin = margin(6, 14, 6, 6), panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
           strip.placement = "outside", strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 1), axis.title.x = element_text(hjust = 0.5, size = 12), axis.text.y = element_text(size = 12, colour = "#2b2b28"),
           panel.spacing.y = unit(0.5, "lines"), plot.background = element_rect(fill = "#ffffff", colour = NA))
-  ggsave(file.path(fig, "Fig_decomposition.png"), g, width = 8.8, height = 10.6, dpi = 280, bg = "#ffffff")
+  ggsave(file.path(fig, "Fig_decomposition.png"), g, width = 8, height = 10.2, dpi = 280, bg = "#ffffff")
   cat("Saved Fig_decomposition.png\n")
 })
 
