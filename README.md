@@ -42,55 +42,30 @@ Usage combines what the network offers at a stop with the use riders make of it.
 
 ## Figures
 
-### Main text
+### Major results
 
-| | |
-|:---:|:---:|
-| ![Construction](figures/Fig_construction.png) | ![The offer](figures/Fig_access_bivariate.png) |
-| **Figure 2.** How deprivation is assigned to stop catchments: neighbourhood score; in one window where four neighbourhoods meet, walking catchments and catchment deprivation; all stops with the rings and sectors that define location. | **Figure 3.** What the network offers: the network over the compact pre-war blocks, deprivation against jobs reachable within 30 minutes, and concentration curves. |
-| ![Periphery](figures/Fig_periphery.png) | ![Offer and use](figures/Fig_offer_use.png) |
-| **Figure 4.** What the network offers at the periphery: neighbourhoods more than 5 km from the centre, the deprived ones in red. | **Figure 5.** Offer and use: each gap split into what the network offers and the use riders make of it, use with the offer held fixed, and where use changes the deprivation of destinations. |
-| ![Two streams](figures/Fig_two_streams.png) | ![Sharing benchmarks](figures/Fig_sharing_benchmark.png) |
-| **Figure 6.** Two streams on one network: riding (corridors), getting off (stops) and the direction of each third's ride-kilometres. | **Figure 7.** Sharing the network, on the lines and where riders get off, against deprivation scattered at random and the map turned or mirrored around the centre. |
-| ![Decomposition](figures/Fig_decomposition.png) | |
-| **Figure 8.** The 22 gaps between more and less deprived catchments and the parts accounted for by location, service, land use and population. | |
-
-Figure 1 is the framework drawn above.
+| |
+|:---:|
+| ![The offer](figures/Fig_access_bivariate.png) |
+| **Figure 3. Deprived core, prime access.** The network over the compact pre-war blocks, catchments by deprivation and by jobs reachable within 30 minutes, and concentration curves: access is progressive, but by position. |
+| ![Two streams](figures/Fig_two_streams.png) |
+| **Figure 6. Two streams that cross at the centre.** Riding (corridors), getting off (stops) and the direction of each third's ride-kilometres. |
+| ![Decomposition](figures/Fig_decomposition.png) |
+| **Figure 8. Places, not people.** The 22 gaps between more and less deprived catchments and the parts accounted for by location, service, land use and population. |
 
 <details>
-<summary><b>Supplementary figures (S1–S18)</b></summary>
+<summary><b>The other figures of the paper</b></summary>
 
 | | |
 |:---:|:---:|
-| ![S1](figures/Fig_construction_full.png) | ![S2](figures/Fig_s1ms_associations.png) |
-| **S1.** How deprivation is assigned to stop catchments, in full. | **S2.** Land use around residents' homes and deprivation across the 42 neighbourhoods. |
-| ![S3](figures/Fig_s1ms_maps.png) | ![S4](figures/Fig_sharpen_onset.png) |
-| **S3.** Deprivation by neighbourhood and land-use types of populated cells. | **S4.** The early-boarding gradient across refined measures. |
-| ![S5](figures/Fig_hubsheds.png) | ![S6](figures/Fig_flows_groups.png) |
-| **S5.** Catchment deprivation and hub-sheds. | **S6.** Largest morning-peak flows from the least and the most deprived thirds. |
-| ![S7](figures/Fig_destination_density.png) | ![S8](figures/Fig_destination_mechanisms.png) |
-| **S7.** Where morning-peak riders alight (kernel density). | **S8.** Destination slopes split into the network part and the lines used. |
-| ![S9](figures/Fig_network_vs_use_map.png) | ![S10](figures/Fig_connections_map.png) |
-| **S9.** Destinations offered by the network and reached, by origin. | **S10.** Where riders connect to other lines. |
-| ![S11](figures/Fig_route_networks_difference.png) | ![S12](figures/Fig_route_heterogeneity_map.png) |
-| **S11.** Route networks: most minus least deprived third. | **S12.** Route heterogeneity by origin. |
-| ![S13](figures/Fig_hub_use_map.png) | ![S14](figures/Fig_route_networks.png) |
-| **S13.** Use of the interchanges, observed and offered. | **S14.** Route networks on weekdays and at weekends. |
-| ![S15](figures/Fig_behaviour.png) | ![S16](figures/Fig_extremes.png) |
-| **S15.** Responses to leave days, service cuts and weather. | **S16.** The extremes of deprivation. |
-| ![S17](figures/Fig_gap_ladder.png) | ![S18](figures/Fig_gap_loo.png) |
-| **S17.** Slopes raw, net of position and net of land use and population. | **S18.** Remainders with one neighbourhood left out. |
+| ![Construction](figures/Fig_construction.png) | ![Periphery](figures/Fig_periphery.png) |
+| **Figure 2.** How deprivation is assigned to stop catchments. | **Figure 4.** What the network offers at the periphery: the deprived neighbourhoods in red. |
+| ![Offer and use](figures/Fig_offer_use.png) | ![Sharing benchmarks](figures/Fig_sharing_benchmark.png) |
+| **Figure 5.** Offer and use in where riders are carried. | **Figure 7.** Sharing the network against deprivation scattered at random and the map turned or mirrored around the centre. |
+| ![S1](figures/Fig_construction_full.png) | |
+| **Supplementary Figure S1.** How deprivation is assigned to stop catchments, in full. | |
 
-Drawn for the supplement, not yet numbered in it:
-
-| | |
-|:---:|:---:|
-| ![Route networks](figures/Fig_route_networks_main.png) | ![Offer and weekends](figures/Fig_two_streams_offer_weekend.png) |
-| Route networks of the least and the most deprived thirds, and their difference. | The two streams as the lines offer them on weekdays, and as ridden at weekends. |
-| ![Rotation benchmark](figures/Fig_rotation_benchmark.png) | ![Meeting places](figures/Fig_meeting_places.png) |
-| Each measure of sharing over the 47 turned and mirrored maps of deprivation. | Where the two thirds get off, and the share of each third's arrivals at the 24 busiest stops. |
-| ![Deprived areas](figures/Fig_deprived_areas_map.png) | ![Destinations](figures/Fig_destinations_main.png) |
-| Where the more and less deprived areas lie, and the network over the compact pre-war blocks (formerly Figure 3). | Deprivation of destinations offered, reached, and their difference (formerly Figure 5). |
+Figure 1 is the framework drawn above. Exploratory figures drawn by the pipeline but not used in the paper are in [`figures/`](figures/).
 
 </details>
 
