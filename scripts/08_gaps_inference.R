@@ -1827,9 +1827,7 @@ section("81", "Map: two streams on the network", {
   }
   P <- list(a = panel("weekday", "obs"), b = panel("weekday", "off"), c = panel("weekend", "obs"))
   mx <- quantile(unlist(lapply(P, `[[`, "wd")), 0.995); mn <- 0.0008
-  ZB <- rbindlist(P)[wd >= mn, .(x0 = min(pmin(X1, X2)) - 1200, x1 = max(pmax(X1, X2)) + 1200, y0 = min(pmin(Y1, Y2)) - 1200, y1 = max(pmax(Y1, Y2)) + 1200)]
-  zoom <- coord_sf(datum = NA, expand = FALSE, xlim = c(ZB$x0, ZB$x1), ylim = c(ZB$y0, ZB$y1))
-  Lz <- L; Lz$bbox <- st_bbox(c(xmin = ZB$x0, ymin = ZB$y0, xmax = ZB$x1, ymax = ZB$y1), crs = st_crs(2180))
+  zoom <- ms_coord(L); Lz <- L   # the whole city, as in the other maps
   LAB <- c("Piątkowo", "Winogrady", "Jeżyce", "Ogrody", "Łazarz", "Wilda", "Rataje", "Chartowo", "Śródka", "Górczyn")
   COMP <- scale_colour_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), breaks = c(0, 0.5, 1),
                                  labels = c("least deprived", "both", "most deprived"), name = "Ridden or reached mainly by riders from the")
@@ -1847,7 +1845,7 @@ section("81", "Map: two streams on the network", {
   pm <- ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
     geom_point(data = MS[order(-wd)], aes(X, Y, size = wd, fill = comp), shape = 21, colour = "#ffffff", stroke = 0.4) +
     geom_text_repel(data = MS[order(-wd)][1:12], aes(X, Y, label = d), size = 3.8, colour = MSTY$ink, bg.colour = "#ffffff", bg.r = 0.12, min.segment.length = 0, segment.size = 0.25,
-                    box.padding = 0.35, max.overlaps = 30, seed = 83) +
+                    box.padding = 0.7, point.padding = 0.25, force = 4, force_pull = 0.4, max.overlaps = 30, seed = 83) +
     scale_fill_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), guide = "none") +
     scale_size_area(max_size = 8, guide = "none") + ms_centre(L) + zoom + labs(title = "Getting off") + theme_ms(13)
   ## (c) axial roses: compass bearing of each segment (0 = north-south, 90 = east-west), weekday ride-km shares

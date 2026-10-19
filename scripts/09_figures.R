@@ -499,10 +499,11 @@ section("69", "Figure 3: what the network offers", {
 
 ## ── 72 · Graphical abstract ────────────────────────────────────────────────────────────────────────────────
 section("72", "Graphical abstract", {
-  ## Graphical abstract (Journal of Transport Geography; at least 1328 x 531 px, w x h): (1) where the most and
-  ## least deprived stop catchments lie on the radial network; (2) for the headline measures, the slope on
-  ## deprivation raw and net of position on the network (gap ladder of script 56, primary specification);
-  ## (3) the main findings in short.
+  ## Graphical abstract (Journal of Transport Geography: at least 1328 x 531 px, w x h, readable at 13 x 5 cm), in
+  ## the order of the paper: (1) the offer: the most and least deprived catchments on the radial network and their
+  ## access to jobs; (2) the shape of the offer: the two streams of riders (Figure 6a); (3) places, not people: the
+  ## gaps raw and net of position on the network (gap ladder of section 56).
+  ## Inputs: stop_complexes.gpkg, gap_thirds_stops.csv, route_segments.csv, segregation_network_corridors.csv (79), gap_ladder.csv (56)
   ## Output: output/figures/Graphical_abstract.png
 
   suppressPackageStartupMessages({library(data.table); library(sf); library(ggplot2); library(patchwork)})
@@ -510,28 +511,51 @@ section("72", "Graphical abstract", {
   source(file.path(REPO, "R/map_style.R"))
   s2 <- file.path(out_dir, "output/stage2"); fig <- file.path(out_dir, "output/figures")
   L <- ms_layers(out_dir)
+  base <- 15
+  tt <- theme(plot.title = element_text(face = "bold", size = base + 1, hjust = 0.5, colour = MSTY$ink, lineheight = 0.95, margin = margin(b = 4)),
+              plot.subtitle = element_text(size = base - 1, hjust = 0.5, colour = MSTY$ink, lineheight = 0.95))
+  ## (1) the offer
   vc <- st_read(file.path(s2, "stop_complexes.gpkg"), "exclusive_400m_network", quiet = TRUE)
   th <- fread(file.path(s2, "gap_thirds_stops.csv"), encoding = "UTF-8")
   vc <- merge(vc, th[third != "middle", .(stop_name, third)], by = "stop_name")
   SG <- fread(file.path(s2, "route_segments.csv"), encoding = "UTF-8")[win == "Monday-Thursday", .(share = sum(share)), by = .(k1, k2, X1, Y1, X2, Y2)]
+  R <- fread(file.path(s2, "gap_ladder.csv"), encoding = "UTF-8")
+  jl <- R[msr == "jobs30" & step == "raw", least][1]; jm <- R[msr == "jobs30" & step == "raw", most][1]
   p1 <- ggplot() + ms_base(L, borders = FALSE) + geom_sf(data = vc, aes(fill = third), colour = NA) +
     scale_fill_manual(values = c(least = MSTY$least, most = MSTY$most), labels = c(least = "Least deprived", most = "Most deprived"), name = NULL) +
-    geom_segment(data = SG[share >= 0.01], aes(X1, Y1, xend = X2, yend = Y2, linewidth = share), colour = "#2b2b28", alpha = 0.55, lineend = "round") +
-    scale_linewidth(range = c(0.2, 1.6), guide = "none") + ms_water_top(L) + ms_outline(L) + ms_centre(L) + ms_coord(L) +
-    labs(title = "Deprived areas sit at the centre\nof a radial network") + theme_ms(10) + theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
-  R <- fread(file.path(s2, "gap_ladder.csv"), encoding = "UTF-8")[step %in% c("raw", "position")]
-  K <- c(ride_km = "Ride length", conn_100 = "Connections per ride", jobs30 = "Jobs within 30 min", t_centre = "Time to the centre", dest_dep = "Deprivation of destinations")
-  R <- R[msr %in% names(K)][, `:=`(lab = factor(K[msr], levels = rev(K)), step = factor(step, levels = c("raw", "position"), labels = c("Raw gap", "Net of network position")))]
-  p2 <- ggplot(R, aes(est, lab, fill = step)) + geom_vline(xintercept = 0, colour = "#9a9893") +
-    geom_col(aes(group = factor(step, levels = rev(levels(step)))), position = position_dodge(width = 0.72), width = 0.66) + scale_fill_manual(values = c("Raw gap" = "#8f8d86", "Net of network position" = "#eb6834"), name = NULL) +
-    labs(title = "Position on the network accounts\nfor most of the gaps", x = "Most vs least deprived (SD per SD)", y = NULL) +
-    theme_minimal(base_size = 10) + theme(plot.title = element_text(face = "bold", size = 10, hjust = 0.5, colour = MSTY$ink), legend.position = "bottom", panel.grid.minor = element_blank(),
-                                          panel.grid.major.y = element_blank(), axis.text.y = element_text(colour = MSTY$ink, size = 9), plot.background = element_rect(fill = "#ffffff", colour = NA))
-  txt <- data.table(y = c(5, 4.1, 3.5, 2.6, 2.0, 1.1, 0.5), t = c("Places, not people", "Shorter rides, fewer transfers and", "better job access follow position", "Destinations: lines from deprived areas run", "through deprived districts; riders narrow it", "Usage beyond position differs little,", "but a coarse measure limits what is ruled out"),
-                    f = c("bold", "plain", "plain", "plain", "plain", "plain", "plain"))
-  p3 <- ggplot(txt, aes(0, y, label = t, fontface = f)) + geom_text(hjust = 0, size = 3.5, colour = MSTY$ink) + xlim(0, 1) + ylim(0, 5.4) +
-    theme_void(base_size = 10) + theme(plot.background = element_rect(fill = "#ffffff", colour = NA))
-  g <- (p1 | p2 | p3) + plot_layout(widths = c(1, 1.15, 0.8))
+    geom_segment(data = SG[share >= 0.01], aes(X1, Y1, xend = X2, yend = Y2, linewidth = share), colour = "#2b2b28", alpha = 0.5, lineend = "round") +
+    scale_linewidth(range = c(0.2, 1.5), guide = "none") + ms_water_top(L) + ms_outline(L) + ms_centre(L) + ms_coord(L) +
+    labs(title = "Deprived core, prime access", subtitle = sprintf("Jobs within 30 min: %.0f%% from the most,\n%.0f%% from the least deprived areas", jm, jl)) +
+    theme_ms(base) + tt +
+    theme(legend.position = "bottom", legend.text = element_text(size = base - 1, colour = MSTY$ink), legend.key.width = unit(0.6, "cm"), legend.key.height = unit(0.4, "cm"))
+  ## (2) the two streams
+  KC <- fread(file.path(s2, "segregation_network_corridors.csv"), encoding = "UTF-8")
+  d <- KC[win == "weekday", .(X1, Y1, X2, Y2, m = most_obs, l = least_obs)][, `:=`(sm = m / sum(m), sl = l / sum(l))][, `:=`(comp = sm / (sm + sl), wd = (sm + sl) / 2)][wd >= 0.0008]
+  mx <- quantile(d$wd, 0.995)
+  p2 <- ggplot() + ms_base(L) + ms_water_top(L) + ms_outline(L) +
+    geom_segment(data = d[order(wd)], aes(X1, Y1, xend = X2, yend = Y2, colour = comp, linewidth = pmin(wd, mx)), lineend = "round") +
+    scale_colour_gradient2(low = MSTY$least, mid = "#a8a69f", high = MSTY$most, midpoint = 0.5, limits = c(0, 1), breaks = c(0, 1),
+                           labels = c("least deprived", "most deprived"), name = "Ridden mainly by riders from the") +
+    scale_linewidth(range = c(0.2, 3), limits = c(0.0008, mx), guide = "none") + ms_centre(L) +
+    ms_coord(L) +
+    labs(title = "Two streams cross at the centre") + theme_ms(base) + tt +
+    theme(legend.position = "bottom", legend.title = element_text(size = base - 1), legend.text = element_text(size = base - 1, colour = MSTY$ink),
+          legend.key.width = unit(1.6, "cm"), legend.key.height = unit(0.3, "cm"))
+  ## (3) places, not people
+  K <- c(jobs30 = "Jobs within 30 min", t_centre = "Time to the centre", ride_km = "Ride length", conn_100 = "Connections per ride", tidal = "Tidal index")
+  G <- R[msr %in% names(K) & step %in% c("raw", "position")][, `:=`(lab = factor(K[msr], levels = rev(K)),
+        step = factor(step, levels = c("raw", "position"), labels = c("Raw gap", "Net of position on the network")))]
+  p3 <- ggplot(G, aes(est, lab, fill = step)) + geom_vline(xintercept = 0, colour = "#9a9893") +
+    geom_col(aes(group = factor(step, levels = rev(levels(step)))), position = position_dodge(width = 0.74), width = 0.68) +
+    scale_fill_manual(values = c("Raw gap" = "#8f8d86", "Net of position on the network" = "#eb6834"), name = NULL) +
+    scale_x_continuous(breaks = c(-0.2, 0, 0.2)) + guides(fill = guide_legend(ncol = 1)) +
+    labs(title = "Places, not people:\nposition accounts for the gaps", x = "Most vs least deprived (SD per SD)", y = NULL) +
+    theme_minimal(base_size = base) + tt +
+    theme(legend.position = "bottom", legend.text = element_text(size = base - 1, colour = MSTY$ink), panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
+          axis.text.y = element_text(colour = MSTY$ink, size = base - 1), axis.title.x = element_text(size = base - 2, colour = MSTY$muted),
+          plot.background = element_rect(fill = "#ffffff", colour = NA))
+  g <- (p1 | p2 | p3) + plot_layout(widths = c(1, 1, 0.95)) &
+    theme(plot.margin = margin(6, 10, 6, 10), plot.background = element_rect(fill = "#ffffff", colour = NA))
   ggsave(file.path(fig, "Graphical_abstract.png"), g, width = 13.28, height = 5.31, dpi = 200, bg = "#ffffff")
   cat("Saved Graphical_abstract.png (2656 x 1062 px)\n")
 })
