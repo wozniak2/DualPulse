@@ -189,7 +189,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   ggsave(file.path(fig, "Fig_construction_full.png"), f, width = 11, height = 16.2, dpi = 300, bg = surf)
 
   ## main version, four panels: (a) the score; in one window (W3), (b) the catchments and (c) catchment deprivation;
-  ## (d) catchment deprivation of every stop with the rings of distance and the sectors that define location.
+  ## (d) catchment deprivation of every stop.
   ## Residents and municipal housing are shown in the full version.
   source(file.path(REPO, "R/map_style.R"))
   mark <- list(geom_sf(data = W3$line, colour = ink, linewidth = 0.5),
@@ -198,7 +198,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   qa <- city_map("dep", "Deprivation score by neighbourhood") + mark
   qb <- p_catch(W3) + os_names(W3, 3.9) + labs(subtitle = "Walking catchments (up to 400 m)")
   qc <- p_cdep(W3, 3.3)
-  qd <- all_stops() + ms_guides(1.75) + mark + labs(subtitle = "All stops, with rings and sectors") + mth
+  qd <- all_stops() + mark + labs(subtitle = "Catchment deprivation, all stops") + mth
   f4 <- (qa + qb) / (qc + qd) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a") &
     theme(legend.position = "bottom", plot.background = element_rect(fill = surf, colour = NA), plot.subtitle = element_text(colour = ink, size = 12.5, hjust = 0.5, margin = margin(b = 3)),
           legend.title = element_text(colour = ink, size = 12), legend.text = element_text(colour = ink2, size = 11.5), plot.tag = element_text(face = "bold", size = 13.5)) &
