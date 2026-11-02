@@ -1,10 +1,10 @@
-# The dual pulse of a city
+# Equitable by position
 
-**How does deprivation shape the use of public transport?**
+**Deprivation, network geography and public transport use**
 
 Marcin Wozniak (Adam Mickiewicz University, Poznań) and Gabriele Filomena (University of Liverpool)
 
-Code and figures for the paper *The dual pulse of a city. How does deprivation shape the use of public transport?* (manuscript in preparation).
+Code and figures for the paper *Equitable by position: deprivation, network geography and public transport use* (manuscript in preparation).
 
 ![Graphical abstract](figures/Graphical_abstract.png)
 
