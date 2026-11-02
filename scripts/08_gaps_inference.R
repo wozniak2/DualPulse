@@ -2,7 +2,7 @@
 ##
 ## Slopes of every measure on deprivation raw, net of position and net of land use and population, their
 ## decomposition and small-cluster inference, and the checks built on them (main text 3.2-3.5, supplementary
-## S4-S6 and S8).
+## S4-S6, S8 and S9).
 ##
 ## Sections (named by the numbered scripts they replace, as in the project notes):
 ##   56      Gap ladder, decomposition and inference
@@ -27,6 +27,8 @@
 ##   84      Offer weighting: periods by departures or by boardings
 ##   85      The periphery: usage and the link to the centre
 ##   86      Supplement tables: sharing, re-allocations and the periphery
+##   87      Injected differences: what the same-trip indices could detect
+##   88      Injected differences: what the destination estimator recovers
 ##
 ## Run from the repository root: Rscript run.R 8   (one section: Rscript run.R 8:73)
 
@@ -2040,4 +2042,281 @@ section("86", "Supplement tables: sharing, re-allocations and the periphery", {
   fwrite(T6, file.path(od, "supp_periphery.csv"))
   writeLines(T6[, pr(label, deprived, other, diff, p_exact, deprived_osiedla, osiedla)], file.path(od, "supp_periphery.tex"), useBytes = TRUE)
   cat("Saved supp_sharing, supp_realloc and supp_periphery (.csv, .tex) in output/supplement\n")
+})
+
+## ── 87 · Injected differences: what the same-trip indices could detect ─────────────────────────────────────────
+section("87", "Injected differences: what the same-trip indices could detect", {
+  ## Injected-effect test, part A: the six same-trip indices (how much and when).
+  ## A known rider-level difference is put into the real line x stop counts: in each catchment a share w of riders
+  ## is deprived (k x the residents' registered unemployed + social-assistance rate, mean of the 2019 and 2021
+  ## rounds), and they do the targeted thing R times as often as other riders, so the stop's targeted count is
+  ## multiplied by f = 1 + w (R - 1). The indices are rebuilt with the formulas of stage 5 section 42 and the
+  ## remainder is estimated with the specification of section 56 (full step, no service, CR2 by neighbourhood).
+  ## Outputs: output/stage2/injection_test/a_fidelity.csv, a_indices_grid.csv, a_indices_thresholds.csv, a_indices_lower.csv
+  suppressPackageStartupMessages({library(data.table); library(splines)})
+  root <- ROOT
+  s2 <- file.path(root, "output/stage2")
+  out <- file.path(s2, "injection_test")
+  dir.create(out, showWarnings = FALSE, recursive = TRUE)
+  source(file.path(REPO, "R/cr_inference.R"))
+  set.seed(20261102)
+
+  ## ── deprived share of riders by stop ─────────────────────────────────────
+  nm <- fread(file.path(root, "data/diagnoza2021_osiedla_ground_truth.csv"), encoding = "UTF-8")[, .(lp, osiedle)]
+  g <- merge(fread(file.path(root, "data/gpr_indicators_ABC_osiedla.csv"), encoding = "UTF-8")[round %in% c(2019, 2021)], nm, by = "lp")
+  rate <- g[, .(rate_ab = mean(A_unemployment_per1000 + B_poverty_per1000) / 1000, rate_b = mean(B_poverty_per1000) / 1000), by = osiedle]
+  wt <- fread(file.path(s2, "catchment_osiedle_weights.csv"), encoding = "UTF-8")
+  wt <- merge(wt, rate, by = "osiedle")
+  W0 <- wt[, .(w_ab = sum(w * rate_ab), w_b = sum(w * rate_b), res = sum(pop)), by = stop_name]
+  city <- W0[, .(ab = weighted.mean(w_ab, res), b = weighted.mean(w_b, res))]
+  X <- as.data.table(readRDS(file.path(s2, "gap_stops.rds")))
+  cat(sprintf("Deprived share of residents (A+B): resident-weighted mean %.3f; across compared stops min %.3f median %.3f max %.3f; correlation with the score %.2f\n",
+              city$ab, min(W0[stop_name %in% X$stop_name, w_ab]), median(W0[stop_name %in% X$stop_name, w_ab]), max(W0[stop_name %in% X$stop_name, w_ab]),
+              W0[X, on = "stop_name"][, cor(w_ab, dep)]))
+  print(merge(X[, .(stop_name, third)], W0, by = "stop_name")[, .(w_ab_mean = round(mean(w_ab), 3), w_ab_max = round(max(w_ab), 3)), by = third])
+
+  ## ── aggregated tables, as in section 42 ──────────────────────────────────
+  cells <- readRDS(file.path(s2, "stage2_line_stop_cells.rds"))
+  cells[, dep := departures - uncovered]; cells <- cells[dep > 0]
+  index <- function(dt, gcols) {
+    dt <- dt[is.finite(q) & w > 0]
+    dt[, n_in := .N, by = gcols]; dt <- dt[n_in >= 2]
+    dt[, dev := q - weighted.mean(q, w), by = gcols]
+    dt[, .(index = weighted.mean(dev, w)), by = stop_name]
+  }
+  lg <- function(k, n) qlogis((k + 0.5) / (n + 1))
+  C <- cells[season == "term"]; Tm <- C[daytype == "monthu"]; Dm <- Tm[night == FALSE]
+  T_vol <- Tm[, .(y = sum(B + A), dep = sum(dep)), by = .(NR_LINI, dir, period, stop_name)]
+  T_am <- Dm[sched_hour %in% 6:8, .(B = sum(B), A = sum(A)), by = .(NR_LINI, dir, stop_name)]
+  T_pm <- Dm[sched_hour %in% 15:17, .(B = sum(B), A = sum(A)), by = .(NR_LINI, dir, stop_name)]
+  early <- Dm[sched_hour < 6, .(dep_early = sum(dep)), by = .(NR_LINI, dir)]
+  T_on <- merge(Dm[, .(Be = sum(B[sched_hour < 6]), Ball = sum(B)), by = .(NR_LINI, dir, stop_name)], early[dep_early > 0], by = c("NR_LINI", "dir"))
+  T_cc <- Dm[, .(Bp = sum(B[sched_hour %in% 7:8]), dp = sum(dep[sched_hour %in% 7:8]), Bm = sum(B[sched_hour %in% 10:13]), dm = sum(dep[sched_hour %in% 10:13])), by = .(NR_LINI, dir, stop_name)][dp > 0 & dm > 0]
+  T_sa <- merge(C[daytype == "sat" & night == FALSE, .(Bs = sum(B), ds = sum(dep)), by = .(NR_LINI, dir, stop_name)],
+                Dm[, .(Bw = sum(B), dw = sum(dep)), by = .(NR_LINI, dir, stop_name)], by = c("NR_LINI", "dir", "stop_name"))
+  T_s1 <- cells[season == "summer" & daytype == "monthu", .(y1 = sum(B + A), d1 = sum(dep)), by = .(NR_LINI, dir, stop_name)]
+  T_s0 <- cells[season == "term" & daytype == "monthu", .(y0 = sum(B + A), d0 = sum(dep)), by = .(NR_LINI, dir, stop_name)]
+  T_su <- merge(T_s1, T_s0, by = c("NR_LINI", "dir", "stop_name"))
+  rm(cells, C, Tm, Dm); invisible(gc())
+
+  ## f: named multiplier by stop
+  fby <- function(dt, f) { v <- f[dt$stop_name]; v[is.na(v)] <- f[["__other__"]]; v }
+  build <- function(f) {
+    r <- list()
+    a <- copy(T_vol)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = log((y * F + 0.5) / dep), w = dep)]; r$volume <- index(a, c("NR_LINI", "dir", "period"))
+    ## tidal: deprived riders board at home R times as often in the morning and alight there R times as often in the afternoon
+    am <- copy(T_am)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = lg(B * F, B * F + A), w = B + A)]
+    pm <- copy(T_pm)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = lg(B, B + A * F), w = B + A)]
+    r$tidal <- merge(index(am, c("NR_LINI", "dir")), index(pm, c("NR_LINI", "dir")), by = "stop_name", suffixes = c("_am", "_pm"))[, .(stop_name, index = index_am - index_pm)]
+    a <- copy(T_on)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = lg(Be * F, Ball + Be * (F - 1)), w = Ball)]; r$onset_b <- index(a, c("NR_LINI", "dir"))
+    a <- copy(T_cc)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = log((Bp * F + 0.5) / dp) - log((Bm + 0.5) / dm), w = dp + dm)]; r$conc_b <- index(a, c("NR_LINI", "dir"))
+    a <- copy(T_sa)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = log((Bs * F + 0.5) / ds) - log((Bw + 0.5) / dw), w = ds + dw)]; r$sat_b <- index(a, c("NR_LINI", "dir"))
+    a <- copy(T_su)[, F := fby(.SD, f), .SDcols = "stop_name"][, `:=`(q = log((y1 * F + 0.5) / d1) - log((y0 + 0.5) / d0), w = d1 + d0)]; r$summer <- index(a, c("NR_LINI", "dir"))
+    r
+  }
+  mkf <- function(wcol, k, R, other) { v <- 1 + pmin(k * W0[[wcol]], 0.95) * (R - 1); names(v) <- W0$stop_name; c(v, "__other__" = 1 + min(k * other, 0.95) * (R - 1)) }
+
+  ## ── fidelity: with no injection the rebuilt indices must equal the published ones ──
+  base <- build(mkf("w_ab", 1, 1, city$ab))
+  LAD <- fread(file.path(s2, "gap_ladder.csv"), encoding = "UTF-8")
+  MS <- c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer")
+  LABEL <- c(volume = "Volume per departure", tidal = "Tidal index", onset_b = "Boardings before 06:00", conc_b = "Morning-peak concentration", sat_b = "Saturday ratio", summer = "Summer ratio")
+  zs <- function(v) (v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE)
+  LOC <- c("ns(dist_km, 3)", "sec_s1", "sec_c1", "sec_s2", "sec_c2")
+  LUSE <- c("b1", "b2", "b3", "b4", "landuse_mix", "fsi", "wc_tree"); POPV <- c("share_0_18", "share_61plus", "lres", "larea")
+  CTRL <- c(LOC, LUSE, POPV)
+  design <- function(m) {
+    Z <- merge(X[, c("stop_name", "dep", "osiedle", "dist_km", "sec_s1", "sec_c1", "sec_s2", "sec_c2", LUSE, POPV), with = FALSE], base[[m]], by = "stop_name")[is.finite(index)]
+    setorder(Z, stop_name)
+    Z[, dz := zs(dep)]; for (v in c(LUSE, POPV)) Z[, (v) := zs(get(v))]
+    Z[]
+  }
+  cat("\nFidelity of the rebuilt indices (no injection) against the published slopes:\n")
+  DS <- lapply(setNames(MS, MS), design)
+  fid <- rbindlist(lapply(MS, function(m) { Z <- DS[[m]]; Z[, yy := zs(index)]
+    f <- lm(reformulate(c("dz", CTRL), "yy"), Z); ci <- crinf(f, Z$osiedle, "dz")
+    pub <- LAD[msr == m & step == "full"]
+    chk <- merge(Z[, .(stop_name, index)], X[, .(stop_name, pub = get(m))], by = "stop_name")
+    data.table(measure = m, n = nrow(Z), n_pub = pub$n, cor_with_published = round(chk[, cor(index, pub, use = "complete.obs")], 5), slope = round(ci$b, 4), slope_pub = round(pub$est, 4), se = round(ci$se2, 4), se_pub = round(pub$se, 4), df = round(ci$df, 2), r2_ctrl = round(pub$r2_ctrl, 3))
+  }))
+  print(fid); fwrite(fid, file.path(out, "a_fidelity.csv"))
+  if (fid[, any(abs(slope - slope_pub) > 0.005 | n != n_pub)]) stop("Rebuilt indices do not reproduce the published slopes")
+
+  ## ── fast CR2 for many outcomes on one design ─────────────────────────────
+  prep_fast <- function(Z) {
+    f <- lm(reformulate(c("dz", CTRL), "index"), Z); Xm <- model.matrix(f); n <- nrow(Xm)
+    Bm <- solve(crossprod(Xm)); j <- match("dz", colnames(Xm)); wv <- as.vector(Xm %*% Bm[j, ])
+    Mres <- diag(n) - Xm %*% Bm %*% t(Xm); gs <- split(seq_len(n), Z$osiedle)
+    cg <- lapply(gs, function(i) { ev <- eigen(Mres[i, i, drop = FALSE], symmetric = TRUE); as.vector(msq(ev, -1/2) %*% wv[i]) })
+    ci <- crinf(f, Z$osiedle, "dz")
+    f0 <- lm(reformulate(CTRL, "index"), Z); X0 <- model.matrix(f0)
+    list(X = Xm, Bm = Bm, w = wv, gs = gs, cg = cg, df = ci$df, gi = as.integer(factor(Z$osiedle)), G = length(gs), yhat0 = fitted(f0), e0 = resid(f0), n = n)
+  }
+  cr2_many <- function(D, Y) {   # Y: n x B; returns slope (index units), CR2 SE
+    b <- colSums(D$w * Y); E <- Y - D$X %*% (D$Bm %*% crossprod(D$X, Y))
+    s2 <- 0; for (g in seq_along(D$gs)) s2 <- s2 + colSums(D$cg[[g]] * E[D$gs[[g]], , drop = FALSE])^2
+    list(b = b, se = sqrt(s2))
+  }
+  WEBB <- c(-sqrt(3/2), -1, -sqrt(1/2), sqrt(1/2), 1, sqrt(3/2))
+  RS <- c(1.1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7, 10); KS <- c(1, 2, 3); NSIM <- 4000; DELTA <- 0.2
+  FD <- lapply(DS, prep_fast)
+
+  run_scen <- function(wcol, other) rbindlist(lapply(KS, function(k) rbindlist(lapply(c(1, RS), function(R) {
+    inj <- build(mkf(wcol, k, R, other))
+    rbindlist(lapply(MS, function(m) {
+      Z <- DS[[m]]; D <- FD[[m]]
+      yi <- merge(Z[, .(stop_name)], inj[[m]], by = "stop_name", sort = FALSE)
+      if (nrow(yi) != D$n || any(!is.finite(yi$index))) stop("stops changed under injection: ", m)
+      add <- yi$index - Z$index
+      ## on the real data: the slope moved by the injection, in SD of the injected measure
+      act <- cr2_many(D, matrix(yi$index, ncol = 1)); sdy <- sd(yi$index)
+      b_real <- act$b / sdy; se_real <- act$se / sdy
+      r2 <- LAD[msr == m & step == "full", r2_ctrl]; lam <- (0.75 - r2) / (1 - r2)
+      add_b <- cr2_many(D, matrix(add, ncol = 1))$b / sd(Z$index)
+      ## simulation with no effect in the real data but the injected one: real residuals, wild cluster draws
+      V <- matrix(sample(WEBB, D$G * NSIM, replace = TRUE), D$G, NSIM)
+      sim <- function(sc) {
+        Y <- D$yhat0 + sc * add + D$e0 * V[D$gi, , drop = FALSE]
+        r <- cr2_many(D, Y); s <- sqrt(colSums((Y - rep(colMeans(Y), each = D$n))^2) / (D$n - 1))
+        b <- r$b / s; se <- r$se / s
+        tc <- qt(0.975, D$df); t90 <- qt(0.95, D$df)
+        c(mean_slope = mean(b), power = mean(abs(b / se) > tc), negligible = mean(b - t90 * se > -DELTA & b + t90 * se < DELTA))
+      }
+      s1 <- sim(1); s2 <- sim(lam)
+      data.table(deprived = wcol, k = k, R = R, measure = m, w_share = NA_real_, lambda = lam, slope_real_data = b_real, se_real_data = se_real, added_slope = add_b, added_slope_err = add_b * lam,
+                 sim_slope = s1[["mean_slope"]], power = s1[["power"]], negligible = s1[["negligible"]], sim_slope_err = s2[["mean_slope"]], power_err = s2[["power"]], negligible_err = s2[["negligible"]])
+    }))
+  }))))
+  t0 <- Sys.time()
+  RES <- run_scen("w_ab", city$ab)
+  RES_b <- run_scen("w_b", city$b)
+  cat("Run time (min):", round(as.numeric(Sys.time() - t0, units = "mins"), 1), "\n")
+  fwrite(rbind(RES, RES_b), file.path(out, "a_indices_grid.csv"))
+
+  ## ── checks ───────────────────────────────────────────────────────────────
+  cat("\nSize check, R = 1 (should be near 0.05 power; negligible = chance of declaring a true zero negligible):\n")
+  print(RES[R == 1 & k == 1, .(measure, power = round(power, 3), negligible = round(negligible, 3), sim_slope = round(sim_slope, 3))])
+  cat("\nMonotonic power in R (violations):", RES[order(deprived, k, measure, R), .(v = sum(diff(power) < -0.03)), by = .(k, measure)][, sum(v)], "\n")
+
+  ## ── summary: thresholds ──────────────────────────────────────────────────
+  pub <- LAD[step == "full" & msr %in% MS, .(measure = msr, est, lo, hi, se, df)]
+  thr <- function(R, v, target) { o <- order(R); R <- R[o]; v <- v[o]; if (max(v) < target) return(NA_real_); i <- which(v >= target)[1]; if (i == 1) return(R[1]); R[i - 1] + (target - v[i - 1]) / (v[i] - v[i - 1]) * (R[i] - R[i - 1]) }
+  SUM <- rbind(RES, RES_b)[, .(R80 = thr(R, power, 0.8), R80_err = thr(R, power_err, 0.8), R_02 = thr(R, added_slope, 0.2), R_02_err = thr(R, added_slope_err, 0.2)), by = .(deprived, k, measure)]
+  SUM <- merge(SUM, pub, by = "measure")
+  excl <- rbind(RES, RES_b)[pub, on = "measure"][, .(R_excl = thr(R, added_slope - hi, 0), R_excl_err = thr(R, added_slope_err - hi, 0)), by = .(deprived, k, measure)]
+  SUM <- merge(SUM, excl, by = c("deprived", "k", "measure"))
+  fwrite(SUM, file.path(out, "a_indices_thresholds.csv"))
+  cat("\nRider-level ratio R needed (A+B, by rider share multiple k). R80: 80% power. R_02: added slope reaches 0.2. R_excl: smallest R the 95% interval of the real remainder excludes. _err: with score reliability 0.75.\n")
+  print(SUM[deprived == "w_ab"][order(measure, k), .(measure, k, R80 = round(R80, 2), R80_err = round(R80_err, 2), R_02 = round(R_02, 2), R_02_err = round(R_02_err, 2), R_excl = round(R_excl, 2), R_excl_err = round(R_excl_err, 2))])
+  cat("\nPower and chance of a 'negligible' verdict, with score error, at selected R (A+B):\n")
+  print(dcast(RES[R %in% c(1.5, 2, 3, 5)][, cell := sprintf("%.2f / %.2f", power_err, negligible_err)], measure + k ~ R, value.var = "cell"))
+  cat("\nAdded slope (SD per SD), no score error, k = 1 and 3:\n")
+  print(dcast(RES[R %in% c(1.5, 2, 3, 5) & k %in% c(1, 3)][, a := round(added_slope, 3)], measure + k ~ R, value.var = "a"))
+
+  ## ── the other direction: deprived riders do it less often, down to never (R = 0) ──
+  RS <- c(0.5, 0); KS <- c(1, 3); NSIM <- 2000
+  LOW <- run_scen("w_ab", city$ab)[R < 1]
+  fwrite(LOW, file.path(out, "a_indices_lower.csv"))
+  cat("\nLower direction, added slope (no score error) and, with score error, power / chance of a negligible verdict:\n")
+  print(LOW[order(measure, k, -R), .(measure, k, R, added = round(added_slope, 3), added_err = round(added_slope_err, 3), power_err = round(power_err, 2), negligible_err = round(negligible_err, 2))])
+})
+
+## ── 88 · Injected differences: what the destination estimator recovers ─────────────────────────────────────────
+section("88", "Injected differences: what the destination estimator recovers", {
+  ## Injected-effect test, part B: can the destination estimator see a rider-level difference in ride length?
+  ## On the valid counted trips of October 2025 (cleaned as in stage 8 section 68), known flows are generated with a
+  ## log-normal decay of ride length around a mode m = 3 km; a share w of each stop's boarders rides around R x m.
+  ## The flows imply alightings at every stop. The Tsygalnitsky recursion sees only boardings and alightings; the gap in
+  ## ride length by deprivation is compared between the true and the estimated flows, raw and at the full step
+  ## (position with service, land use, population). Output: output/stage2/injection_test/b_estimator.csv
+  suppressPackageStartupMessages({library(data.table); library(sf); library(splines)})
+  root <- ROOT; s2 <- file.path(root, "output/stage2")
+  peka <- PEKA_TABLES; gtfs <- GTFS_DIR
+  out <- file.path(s2, "injection_test"); dir.create(out, showWarnings = FALSE, recursive = TRUE)
+  source(file.path(REPO, "R/cr_inference.R"))
+  setDTthreads(8)
+  C <- st_read(file.path(s2, "stop_complexes.gpkg"), "complexes", quiet = TRUE)
+  gs <- fread(file.path(gtfs, "stops.txt"), encoding = "UTF-8")[, code := sub("[0-9]+$", "", stop_code)]
+  gt <- unique(gs[, .(code, stop_name)])[stop_name %in% C$stop_name][!duplicated(code)]
+  cc <- gs[, .(lon = mean(stop_lon), lat = mean(stop_lat)), by = code]
+  xy <- st_coordinates(st_transform(st_as_sf(cc, coords = c("lon", "lat"), crs = 4326), st_crs(C))); cc[, `:=`(X = xy[, 1], Y = xy[, 2])]
+  x <- readRDS(file.path(peka, "peka_2025_10.rds")); setDT(x)
+  x <- x[!is.na(DATA) & !is.na(SYM_PRZYST) & !is.na(NR_LINI) & NR_LINI != "", .(DT_KARTY, ID_KURSU, LP_PRZYST, NB_WOZU, DATA, NR_LINI, SYM_PRZYST, has_apc, boardings, alightings)]
+  x <- unique(x, by = c("DT_KARTY", "ID_KURSU", "LP_PRZYST"))
+  x[, tid := .GRP, by = .(DT_KARTY, ID_KURSU)]; setorder(x, tid, LP_PRZYST)
+  x[, `:=`(b = fcoalesce(as.numeric(boardings), 0), a = fcoalesce(as.numeric(alightings), 0))]
+  vd <- x[has_apc == TRUE, .(B = sum(b), A = sum(a)), by = .(NB_WOZU, DT_KARTY)][, vd_ok := pmax(B, A) == 0 | abs(B - A) <= 0.10 * pmax(B, A)]
+  x[vd, vd_ok := i.vd_ok, on = .(NB_WOZU, DT_KARTY)]
+  tr <- x[, .(all_apc = all(has_apc), B = sum(b), A = sum(a)), by = tid][, imb_ok := abs(B - A) <= pmax(5, 0.30 * pmax(B, A))]
+  tr[, `:=`(fb = fifelse(B > 0, (B + A) / 2 / B, 1), fa = fifelse(A > 0, (B + A) / 2 / A, 1))]
+  x[tr, `:=`(all_apc = i.all_apc, imb_ok = i.imb_ok, fb = i.fb, fa = i.fa), on = "tid"]
+  x[, `:=`(bb = b * fb, ab = a * fa)][, load := cumsum(bb - ab), by = tid]
+  x[x[, .(load_ok = min(load) >= -3), by = tid], load_ok := i.load_ok, on = "tid"]
+  x[, counted := has_apc & all_apc & (vd_ok %in% TRUE) & imb_ok & load_ok]
+  ok <- x[, .(ok = all(counted)), by = tid][ok == TRUE, tid]
+  w <- x[tid %in% ok, .(tid, LP_PRZYST, SYM_PRZYST, bb, ab)]; rm(x); invisible(gc())
+  w[gt, cx := i.stop_name, on = c(SYM_PRZYST = "code")][is.na(cx), cx := "outside"]
+  w[cc, `:=`(X = i.X, Y = i.Y), on = c(SYM_PRZYST = "code")]
+  w[, `:=`(X = nafill(nafill(X, "locf"), "nocb"), Y = nafill(nafill(Y, "locf"), "nocb")), by = tid]
+  w[, km := cumsum(fcoalesce(sqrt((X - shift(X))^2 + (Y - shift(Y))^2), 0)) / 1000, by = tid]
+  O <- w[bb > 0, .(tid, lp_o = LP_PRZYST, o = cx, bo = bb, km_o = km)]
+  Dd <- w[, .(tid, lp_d = LP_PRZYST, att = ab + 0.5, km_d = km)]
+  P <- Dd[O, on = .(tid, lp_d > lp_o), .(tid = i.tid, lp_o = i.lp_o, lp_d = x.lp_d, o = i.o, bo = i.bo, att = x.att, km = x.km_d - i.km_o), allow.cartesian = TRUE, nomatch = 0]
+  P[, go := frank(.SD, ties.method = "dense"), .SDcols = c("tid", "lp_o")]; P[, gd := frank(.SD, ties.method = "dense"), .SDcols = c("tid", "lp_d")]
+  setorder(P, tid, lp_o, lp_d)
+  cat("Valid counted trips:", uniqueN(w$tid), "| pairs:", nrow(P), "\n")
+  tsy <- function(P) {
+    st <- unique(rbind(P[, .(tid, lp = lp_o, b = bo, a = NA_real_)], P[, .(tid, lp = lp_d, b = NA_real_, a = a_syn)]), by = NULL)
+    st <- st[, .(b = max(c(0, b), na.rm = TRUE), a = max(c(0, a), na.rm = TRUE)), by = .(tid, lp)][order(tid, lp)]
+    st[, L := shift(cumsum(b - a), fill = 0), by = tid][, p := fifelse(a <= 0, 0, fifelse(L > a, a / L, 1))][, z := p >= 1 - 1e-9]
+    st[, `:=`(Cc = cumsum(fifelse(z, 0, log1p(-p))), g = cumsum(z)), by = tid][, `:=`(Cp = shift(Cc, fill = 0), gp = shift(g, fill = 0L)), by = tid]
+    P[st, `:=`(C_o = i.Cc, g_o = i.g), on = .(tid, lp_o = lp)]; P[st, `:=`(p_d = i.p, Cp_d = i.Cp, gp_d = i.gp), on = .(tid, lp_d = lp)]
+    P[, f_tsy := bo * p_d * exp(Cp_d - C_o) * (gp_d == g_o)]
+    P[]
+  }
+  ## deprived share by stop
+  nm <- fread(file.path(root, "data/diagnoza2021_osiedla_ground_truth.csv"), encoding = "UTF-8")[, .(lp, osiedle)]
+  g <- merge(fread(file.path(root, "data/gpr_indicators_ABC_osiedla.csv"), encoding = "UTF-8")[round %in% c(2019, 2021)], nm, by = "lp")
+  rate <- g[, .(rate_ab = mean(A_unemployment_per1000 + B_poverty_per1000) / 1000), by = osiedle]
+  wt <- merge(fread(file.path(s2, "catchment_osiedle_weights.csv"), encoding = "UTF-8"), rate, by = "osiedle")
+  W0 <- wt[, .(w_ab = sum(w * rate_ab), res = sum(pop)), by = stop_name]; city <- W0[, weighted.mean(w_ab, res)]
+  Xs <- as.data.table(readRDS(file.path(s2, "gap_stops.rds")))
+  zs <- function(v) (v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE)
+  NET <- c("ns(dist_km, 3)", "sec_s1", "sec_c1", "sec_s2", "sec_c2", "l_lines", "l_dep", "tram_share", "direct_centre")
+  LUSE <- c("b1", "b2", "b3", "b4", "landuse_mix", "fsi", "wc_tree"); POPV <- c("share_0_18", "share_61plus", "lres", "larea")
+  M0 <- 3; SDL <- 0.6
+  dens <- function(km, m) exp(-(log(pmax(km, 0.2)) - log(m))^2 / (2 * SDL^2))
+  P[, u0 := att * dens(km, M0)]; P[, p0 := u0 / sum(u0), by = go]
+  run <- function(wmap, R, label, k) {
+    P[, wo := wmap[o]]; P[is.na(wo), wo := wmap[["__other__"]]]
+    P[, u1 := att * dens(km, M0 * R)]; P[, p1 := u1 / sum(u1), by = go]
+    P[, t_true := bo * ((1 - wo) * p0 + wo * p1)]
+    A <- P[, .(a_syn = sum(t_true)), by = gd]; P[A, a_syn := i.a_syn, on = "gd"]; P[is.na(a_syn), a_syn := 0]
+    tsy(P)
+    OR <- P[o != "outside", .(true = sum(t_true * km) / sum(t_true), est = sum(f_tsy * km) / sum(f_tsy), b = sum(t_true)), by = .(stop_name = o)][b >= 400]
+    Z <- merge(OR, Xs, by = "stop_name"); Z[, dz := zs(dep)]; for (v in c("l_lines", "l_dep", "tram_share", "direct_centre", LUSE, POPV)) Z[, (v) := zs(get(v))]
+    sl <- function(y, ctrl) { f <- lm(reformulate(c("dz", ctrl), y), Z); ci <- crinf(f, Z$osiedle, "dz"); c(b = ci$b, se = ci$se2, df = ci$df) }
+    a <- sl("true", character(0)); b <- sl("est", character(0)); c1 <- sl("true", c(NET, LUSE, POPV)); d1 <- sl("est", c(NET, LUSE, POPV))
+    data.table(label, k, R, origins = nrow(Z), mean_true = P[, sum(t_true * km) / sum(t_true)], mean_est = P[, sum(f_tsy * km) / sum(f_tsy)],
+               raw_true_km = a[["b"]], raw_est_km = b[["b"]], full_true_km = c1[["b"]], full_est_km = d1[["b"]], full_est_se = d1[["se"]], full_est_df = d1[["df"]], sd_est = sd(Z$est), sd_true = sd(Z$true),
+               origin_gap_true = Z[third == "most", weighted.mean(true, b)] - Z[third == "least", weighted.mean(true, b)], origin_gap_est = Z[third == "most", weighted.mean(est, b)] - Z[third == "least", weighted.mean(est, b)])
+  }
+  mk <- function(k) { v <- pmin(k * W0$w_ab, 0.95); names(v) <- W0$stop_name; c(v, "__other__" = min(k * city, 0.95)) }
+  GRID <- rbindlist(lapply(c(1, 3), function(k) rbindlist(lapply(c(1, 1.5, 2, 3), function(R) { r <- run(mk(k), R, "deprived riders", k); cat(sprintf("k=%d R=%.1f done\n", k, R)); r }))))
+  ## extreme: every rider of the most deprived third of stops rides R times as far; everyone else as before
+  third <- setNames(as.numeric(Xs$third == "most"), Xs$stop_name)
+  EXT <- rbindlist(lapply(c(1, 1.5, 2, 3), function(R) run(c(third, "__other__" = 0), R, "whole most deprived third", 0L)))
+  RES <- rbind(GRID, EXT)
+  base <- RES[R == 1, .(label, k, b_raw_t = raw_true_km, b_raw_e = raw_est_km, b_full_t = full_true_km, b_full_e = full_est_km, g_t = origin_gap_true, g_e = origin_gap_est)]
+  RES <- merge(RES, base, by = c("label", "k"), sort = FALSE)
+  RES[, `:=`(added_raw_true = raw_true_km - b_raw_t, added_raw_est = raw_est_km - b_raw_e, added_full_true = full_true_km - b_full_t, added_full_est = full_est_km - b_full_e,
+             added_third_true = origin_gap_true - g_t, added_third_est = origin_gap_est - g_e)]
+  RES[, `:=`(recovered_raw = added_raw_est / added_raw_true, recovered_full = added_full_est / added_full_true, recovered_third = added_third_est / added_third_true,
+             added_full_est_sd = added_full_est / sd_est, t_full = added_full_est / full_est_se)]
+  fwrite(RES, file.path(out, "b_estimator.csv"))
+  cat("\nFidelity with no injection (m = 3 km; published synthetic test: slope_true_sd -0.192, slope_est_sd -0.211, mean ride 3.97):\n")
+  print(RES[R == 1 & k == 1 & label == "deprived riders", .(origins, mean_true = round(mean_true, 3), mean_est = round(mean_est, 3), raw_true_sd = round(raw_true_km / sd_true, 3), raw_est_sd = round(raw_est_km / sd_est, 3))])
+  cat("\nRide length added by the injection and recovered by the estimator:\n")
+  print(RES[R > 1, .(label, k, R, mean_true = round(mean_true, 2), add_third_true = round(added_third_true, 3), add_third_est = round(added_third_est, 3), rec_third = round(recovered_third, 2),
+                     add_full_true = round(added_full_true, 3), add_full_est = round(added_full_est, 3), rec_full = round(recovered_full, 2), add_full_est_sd = round(added_full_est_sd, 3), t_full = round(t_full, 2))])
 })
