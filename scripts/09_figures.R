@@ -26,8 +26,7 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
   ## Main version (Figure 2), four panels: (a) the deprivation score by osiedle; in one
   ##   window, around Niezłomnych, where Jeżyce, Stare Miasto, Św. Łazarz and Wilda meet:
   ##   (b) the walking catchments on the pedestrian network, (c) catchment deprivation,
-  ##   the residents' mean; (d) catchment deprivation of every stop, with the rings of
-  ##   distance and the sectors that define location.
+  ##   the residents' mean; (d) catchment deprivation of every stop.
   ## Full version (supplementary Figure S1), twelve panels:
   ## Row 1, deprivation by osiedle: (a) registered unemployment and (b) social-
   ##   assistance poverty, each the city's standardised score averaged over the
@@ -211,8 +210,8 @@ section("57", "Figure 2: how deprivation is assigned to stop catchments", {
 ## ── 60 · Where the more and less deprived areas lie (supplement); network panel of Figure 3 ────────────────
 section("60", "Where the more and less deprived areas lie; the network panel of Figure 3", {
   ## Where the more and less deprived areas lie, and why (manuscript §3.1). The two-panel figure is kept for the
-  ## supplement; panel (b), the network, is also saved (panel_network.rds) for Figure 3 (section 69), and the
-  ## rings and sectors of panel (a) are drawn on Figure 2d (section 57).
+  ## supplement, the only map with the rings and sectors; panel (b), the network, is also saved without them
+  ## (panel_network.rds) for Figure 3 (section 69).
   ## (a) Stop catchments of the least and the most deprived thirds (the comparison
   ##     groups of Table 2), with rings of distance (2, 4, 6 and 8 km) and the eight
   ##     sectors around the Old Market Square.
@@ -285,8 +284,8 @@ section("60", "Where the more and less deprived areas lie; the network panel of 
   pb <- net_panel(guides_, 9.5, "Transit network over compact pre-war blocks (beige)")
   f <- (pa | pb) + plot_annotation(tag_levels = "a") & theme(plot.background = element_rect(fill = surf, colour = NA))
   ggsave(file.path(fig, "Fig_deprived_areas_map.png"), f, width = 11, height = 6.4, dpi = 300, bg = surf)
-  ## Figure 3a: the same panel with text sized for a figure saved 8.6 in wide
-  saveRDS(net_panel(ms_guides(1.6), 13, "Network over pre-war blocks (beige)"), file.path(fig, "panel_network.rds"))
+  ## Figure 3a: the same panel without rings and sectors, with text sized for a figure saved 8.6 in wide
+  saveRDS(net_panel(NULL, 13, "Network over pre-war blocks (beige)"), file.path(fig, "panel_network.rds"))
   cat("Saved Fig_deprived_areas_map.png (supplement) and panel_network.rds (Figure 3a)\n")
 })
 
