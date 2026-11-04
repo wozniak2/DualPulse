@@ -255,7 +255,7 @@ section("60", "Where the more and less deprived areas lie; the network panel of 
   SG <- merge(merge(SG, xy[, .(a = stop_name, xa = X, ya = Y)], by = "a"), xy[, .(b = stop_name, xb = X, yb = Y)], by = "b")
   SG <- SG[sqrt((xa - xb)^2 + (ya - yb)^2) < 3000]                           # drop non-stop runs between distant stops
   segs <- st_sf(SG[, .(mode, departures)], geometry = st_sfc(lapply(seq_len(nrow(SG)), function(i) st_linestring(rbind(c(SG$xa[i], SG$ya[i]), c(SG$xb[i], SG$yb[i])))), crs = 2180))
-  segs <- segs[order(segs$departures), ]
+  segs <- segs[order(segs$mode == "Tram", segs$departures), ]               # buses first, trams drawn on top
   cat(sprintf("Network segments: %d (tram %d, bus %d); departures per segment median %.0f, max %.0f\n", nrow(segs), sum(segs$mode == "Tram"), sum(segs$mode == "Bus"),
               median(segs$departures), max(segs$departures)))
 
@@ -274,18 +274,19 @@ section("60", "Where the more and less deprived areas lie; the network panel of 
     ms_labels(L, c("Jeżyce", "Łazarz", "Wilda", "Górczyn", "Piątkowo", "Winogrady", "Rataje", "Chartowo", "Główna", "Krzesiny"), size = 2.3) +
     ms_scalebar(L, pos = c(0.0, 0.02)) + coord_sf(datum = NA) + labs(title = "Stop catchments by deprivation") + theme_ms()
   net_panel <- function(gs, base, title) ggplot() + ms_base(L) +
-    geom_sf(data = compact, fill = "#e0c9a6", colour = NA) + ms_water_top(L) +
+    geom_sf(data = compact, fill = "#8a8780", colour = NA) + ms_water_top(L) +
     geom_sf(data = st_cast(st_geometry(osi), "MULTILINESTRING"), colour = "#ffffff", linewidth = 0.25) + ms_outline(L) +
     geom_sf(data = segs, aes(linewidth = departures, colour = mode), lineend = "round") +
     scale_linewidth_continuous(range = c(0.12, 2.4), breaks = c(100, 300, 600), name = "Weekday departures") +
-    scale_colour_manual(values = c(Tram = ink, Bus = "#8f8d86"), name = NULL) + gs +
+    scale_colour_manual(values = c(Tram = "#00796b", Bus = "#a8442f"), name = NULL) + gs +   # teal trams over brick-red buses
     coord_sf(datum = NA) + labs(title = title) + theme_ms(base) +
-    guides(colour = guide_legend(override.aes = list(linewidth = 1.2))) + theme(legend.box = "vertical", legend.spacing.y = unit(0.05, "cm"))
-  pb <- net_panel(guides_, 9.5, "Transit network over compact pre-war blocks (beige)")
+    guides(colour = guide_legend(override.aes = list(linewidth = 1.6)), linewidth = guide_legend(override.aes = list(colour = "#6b6a64"))) +
+    theme(legend.box = "vertical", legend.spacing.y = unit(0.05, "cm"))
+  pb <- net_panel(guides_, 9.5, "Transit network over compact pre-war blocks (grey)")
   f <- (pa | pb) + plot_annotation(tag_levels = "a") & theme(plot.background = element_rect(fill = surf, colour = NA))
   ggsave(file.path(fig, "Fig_deprived_areas_map.png"), f, width = 11, height = 6.4, dpi = 300, bg = surf)
   ## Figure 3a: the same panel without rings and sectors, with text sized for a figure saved 8.6 in wide
-  saveRDS(net_panel(NULL, 13, "Network over pre-war blocks (beige)"), file.path(fig, "panel_network.rds"))
+  saveRDS(net_panel(NULL, 13, "Network over pre-war blocks (grey)"), file.path(fig, "panel_network.rds"))
   cat("Saved Fig_deprived_areas_map.png (supplement) and panel_network.rds (Figure 3a)\n")
 })
 
@@ -459,21 +460,24 @@ section("69", "Figure 3: what the network offers", {
 
   pm <- ggplot() + ms_base(L) + geom_sf(data = P, aes(fill = col), colour = NA) + scale_fill_identity() + ms_water_top(L) + ms_outline(L) +
     ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Główna", "Krzesiny", "Głuszyna"), size = 3.3) +
-    ms_centre(L) + ms_scalebar(L, km = 4, text = 1.6) + ms_coord(L) + theme_ms(13) + labs(title = "Deprivation and access to jobs")
+    ms_centre(L) + ms_coord(L) + theme_ms(13) + labs(title = "Deprivation and access to jobs")
   ## legend: 3 x 3 tiles with the share of residents in each cell
   LG <- merge(BV, D[, .(res = sum(residents)), by = .(i, j)], by = c("i", "j"), all.x = TRUE)[is.na(res), res := 0][, share := 100 * res / sum(res)]
+  ## text colour: white or ink, whichever contrasts more with the tile (WCAG relative luminance)
+  lum <- function(h) { v <- grDevices::col2rgb(h) / 255; v <- ifelse(v <= 0.03928, v / 12.92, ((v + 0.055) / 1.055)^2.4); sum(c(0.2126, 0.7152, 0.0722) * v) }
+  LG[, txt := vapply(col, function(h) { l <- lum(h); if (1.05 / (l + 0.05) >= (l + 0.05) / (lum(MSTY$ink) + 0.05)) "#ffffff" else MSTY$ink }, "")]
   pl <- ggplot(LG, aes(j, i)) + geom_tile(aes(fill = col), colour = "#ffffff", linewidth = 0.8) + scale_fill_identity() +
-    geom_text(aes(label = sprintf("%.0f%%", share), colour = ifelse(i + j >= 5 | (i == 3 & j == 1), "#ffffff", MSTY$ink)), size = 2.8) + scale_colour_identity() +
+    geom_text(aes(label = sprintf("%.0f%%", share), colour = txt), size = 3.6, fontface = "bold") + scale_colour_identity() +
     scale_x_continuous(breaks = 1:3, labels = c("low", "", "high"), expand = c(0, 0)) + scale_y_continuous(breaks = 1:3, labels = c("least", "", "most"), expand = c(0, 0)) +
     labs(x = "Jobs within 30 min \u2192", y = "Deprivation \u2192") + coord_equal() +
-    theme_minimal(base_size = 11) + theme(panel.grid = element_blank(), axis.title = element_text(size = 11, colour = MSTY$ink), axis.text = element_text(size = 10, colour = MSTY$muted),
+    theme_minimal(base_size = 12) + theme(panel.grid = element_blank(), axis.title = element_text(size = 12, colour = MSTY$ink), axis.text = element_text(size = 11.5, colour = MSTY$muted),
                                             plot.background = element_rect(fill = NA, colour = NA))
   pa <- pm                                                                  # the 3 x 3 legend (pl) sits below the map, hiding no catchments
 
   pn <- readRDS(file.path(fig, "panel_network.rds"))                        # the network over the pre-war blocks (section 60)
-  pb <- pa / (plot_spacer() + pl + plot_spacer() + plot_layout(widths = c(0.35, 1, 0.35))) + plot_layout(heights = c(1, 0.27))   # legend under map b
+  pb <- pa / (plot_spacer() + pl + plot_spacer() + plot_layout(widths = c(0.15, 1, 0.15))) + plot_layout(heights = c(1, 0.38))   # legend under map b
   g <- (pn | pb) + plot_annotation(tag_levels = list(c("a", "b", ""))) & theme(plot.tag = element_text(face = "bold", size = 14))
-  ggsave(file.path(fig, "Fig_access_bivariate.png"), g, width = 8.6, height = 5.9, dpi = 300, bg = "#ffffff")
+  ggsave(file.path(fig, "Fig_access_bivariate.png"), g, width = 8.6, height = 6.5, dpi = 300, bg = "#ffffff")
   cat(sprintf("Access thirds: jobs within 30 min <= %.1f%% (low), <= %.1f%% (middle), above (high)\n", qa[1], qa[2]))
   print(LG[order(-i, j), .(deprivation = c("least", "middle", "most")[i], access = c("low", "middle", "high")[j], residents = round(res), share = round(share, 1))])
   cat("Saved Fig_access_bivariate.png\n")
