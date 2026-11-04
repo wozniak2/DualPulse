@@ -1163,18 +1163,19 @@ section("75", "Peripheral deprivation: what the network offers deprived areas fa
   cat("\nThreshold checks (south of the centre, main): jobs30, t_centre, transfers_jobs\n")
   print(TS[area == "south" & check == "main" & msr %in% c("jobs30", "t_centre", "transfers_jobs"), .(km, msr, k = deprived_osiedla, n = osiedla, diff = round(diff, 2), p = round(p_exact, 3))])
 
-  ## figure: osiedle-level offer against distance, peripheral osiedla, deprived highlighted
+  ## figure: osiedle-level offer against distance, peripheral osiedla, deprived highlighted; the two measures of the
+  ## main text (jobs within 30 minutes, time to the centre), the others are in supplementary Table S6
   F <- OS[area == "all"]
-  FL <- melt(F, id.vars = c("osiedle", "deprived", "km_median", "complexes"), measure.vars = c("jobs30", "t_centre", "eff_dest_network", "conn_100"))
-  FL[, variable := factor(M[as.character(variable)], levels = M[c("jobs30", "t_centre", "eff_dest_network", "conn_100")])]
+  FL <- melt(F, id.vars = c("osiedle", "deprived", "km_median", "complexes"), measure.vars = c("jobs30", "t_centre"))
+  FL[, variable := factor(M[as.character(variable)], levels = M[c("jobs30", "t_centre")])]
   g <- ggplot(FL, aes(km_median, value)) + geom_point(aes(colour = deprived, size = complexes), alpha = 0.85) +
     ggrepel::geom_text_repel(data = FL[deprived == TRUE], aes(label = osiedle), size = 3.6, colour = "#c73a39", min.segment.length = 0, seed = 1) +
-    facet_wrap(~variable, scales = "free_y", nrow = 2) +
+    facet_wrap(~variable, scales = "free_y", nrow = 1) +
     scale_colour_manual(values = c(`TRUE` = "#e34948", `FALSE` = "#8f8d86"), labels = c(`TRUE` = "Most deprived third", `FALSE` = "Other"), name = NULL) +
     scale_size_area(max_size = 5, guide = "none") + labs(x = "Distance from the Old Market Square (km, median of the neighbourhood's complexes)", y = NULL) +
     theme_minimal(base_size = 12.5) + theme(legend.position = "bottom", panel.grid.minor = element_blank(), strip.text = element_text(face = "bold", size = 12.5),
                                             legend.text = element_text(size = 12.5), axis.text = element_text(size = 11.5))
-  ggsave(file.path(fig, "Fig_periphery.png"), g, width = 7.6, height = 7, dpi = 300, bg = "white")
+  ggsave(file.path(fig, "Fig_periphery.png"), g, width = 9, height = 4.8, dpi = 300, bg = "white")
   cat("\nSaved periphery_stops.csv, periphery_osiedla.csv, periphery_tests.csv, Fig_periphery.png\n")
 })
 

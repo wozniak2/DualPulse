@@ -430,11 +430,10 @@ section("69", "Figure 3: what the network offers", {
   ## What the network offers (main text): (a) the transit network over the compact pre-war blocks (drawn by
   ## section 60); (b) bivariate map of stop catchments, thirds of deprivation x thirds of morning-peak access
   ## (share of the city's jobs within 30 minutes); the legend gives the share of residents in each cell;
-  ## (c) concentration curves of service, access and ride length over residents ranked from the most to the
-  ## least deprived catchment (script 65 computes the indices).
+  ## the concentration indices of access are reported in the text and supplement (script 65), not drawn.
   ## Bivariate colours: bilinear mix in CIELab of four corners (warm grey: less deprived, poor access; red:
   ## more deprived, poor access; blue: less deprived, good access; dark violet: more deprived, good access).
-  ## Inputs: access_origin.csv (script 54), gap_thirds_stops.csv and gap_stops.rds (56), catchments (39)
+  ## Inputs: access_origin.csv (script 54), gap_thirds_stops.csv (56), catchments (39)
   ## Output: output/figures/Fig_access_bivariate.png
 
   suppressPackageStartupMessages({library(data.table); library(sf); library(ggplot2); library(patchwork)})
@@ -459,38 +458,22 @@ section("69", "Figure 3: what the network offers", {
   P <- merge(CP[, "stop_name"], D[, .(stop_name, col)], by = "stop_name")
 
   pm <- ggplot() + ms_base(L) + geom_sf(data = P, aes(fill = col), colour = NA) + scale_fill_identity() + ms_water_top(L) + ms_outline(L) +
-    ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Główna", "Krzesiny", "Głuszyna"), size = 3.9) +
+    ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Główna", "Krzesiny", "Głuszyna"), size = 3.3) +
     ms_centre(L) + ms_scalebar(L, km = 4, text = 1.6) + ms_coord(L) + theme_ms(13) + labs(title = "Deprivation and access to jobs")
   ## legend: 3 x 3 tiles with the share of residents in each cell
   LG <- merge(BV, D[, .(res = sum(residents)), by = .(i, j)], by = c("i", "j"), all.x = TRUE)[is.na(res), res := 0][, share := 100 * res / sum(res)]
   pl <- ggplot(LG, aes(j, i)) + geom_tile(aes(fill = col), colour = "#ffffff", linewidth = 0.8) + scale_fill_identity() +
-    geom_text(aes(label = sprintf("%.0f%%", share), colour = ifelse(i + j >= 5 | (i == 3 & j == 1), "#ffffff", MSTY$ink)), size = 3.3) + scale_colour_identity() +
+    geom_text(aes(label = sprintf("%.0f%%", share), colour = ifelse(i + j >= 5 | (i == 3 & j == 1), "#ffffff", MSTY$ink)), size = 2.8) + scale_colour_identity() +
     scale_x_continuous(breaks = 1:3, labels = c("low", "", "high"), expand = c(0, 0)) + scale_y_continuous(breaks = 1:3, labels = c("least", "", "most"), expand = c(0, 0)) +
     labs(x = "Jobs within 30 min \u2192", y = "Deprivation \u2192") + coord_equal() +
     theme_minimal(base_size = 11) + theme(panel.grid = element_blank(), axis.title = element_text(size = 11, colour = MSTY$ink), axis.text = element_text(size = 10, colour = MSTY$muted),
                                             plot.background = element_rect(fill = NA, colour = NA))
-  pa <- pm                                                                  # the 3 x 3 legend (pl) sits beside the curves, hiding no catchments
+  pa <- pm                                                                  # the 3 x 3 legend (pl) sits below the map, hiding no catchments
 
-  ## concentration curves (needs gap_stops.rds of script 56)
-  X <- readRDS(file.path(s2, "gap_stops.rds")); X[, `:=`(residents = expm1(lres), departures = exp(l_dep))]
-  X[, dep_per_1000 := 1000 * departures / residents]
-  CV <- c(departures = "Departures at the stop", dep_per_1000 = "Departures per 1,000 residents", jobs30 = "Jobs within 30 min", ride_km = "Ride length")
-  CC <- rbindlist(lapply(names(CV), function(v) { Z <- X[is.finite(get(v)) & residents > 0][order(-dep)]
-    data.table(var = CV[[v]], x = c(0, cumsum(Z$residents) / sum(Z$residents)), y = c(0, cumsum(Z$residents * Z[[v]]) / sum(Z$residents * Z[[v]]))) }))
-  CC[, var := factor(var, levels = CV)]
-  pal <- c("Departures at the stop" = "#eb6834", "Departures per 1,000 residents" = "#8f8d86", "Jobs within 30 min" = MSTY$least, "Ride length" = "#1baf7a")
-  ends <- CC[, .SD[which.min(abs(x - 0.33))], by = var]
-  pb <- ggplot(CC, aes(x, y, colour = var)) + geom_abline(slope = 1, intercept = 0, colour = "#b9b7b0", linetype = "dashed", linewidth = 0.4) +
-    geom_line(linewidth = 0.8) + scale_colour_manual(values = pal, name = NULL) +
-    scale_x_continuous(labels = scales::percent, expand = c(0.01, 0)) + scale_y_continuous(labels = scales::percent, expand = c(0.01, 0)) + coord_equal() +
-    labs(title = "Concentration over residents, most deprived first", x = "Residents, cumulative, from the most deprived catchment", y = "Cumulative share") +
-    theme_minimal(base_size = 13) + theme(plot.title = element_text(size = 13, hjust = 0.5, colour = MSTY$ink), legend.position = c(0.64, 0.2), legend.text = element_text(size = 12),
-                                         legend.key.height = unit(0.5, "cm"), panel.grid.minor = element_blank(), plot.background = element_rect(fill = "#ffffff", colour = NA),
-                                         axis.title = element_text(size = 12.5, colour = MSTY$ink), axis.text = element_text(size = 11.5), plot.tag = element_text(face = "bold", size = 14))
   pn <- readRDS(file.path(fig, "panel_network.rds"))                        # the network over the pre-war blocks (section 60)
-  g <- (pn | pa) / (plot_spacer() + pb + pl + plot_layout(widths = c(0.1, 1, 0.55))) + plot_layout(heights = c(1.05, 1)) +
-    plot_annotation(tag_levels = list(c("a", "b", "c", ""))) & theme(plot.tag = element_text(face = "bold", size = 14))
-  ggsave(file.path(fig, "Fig_access_bivariate.png"), g, width = 8.6, height = 9.6, dpi = 300, bg = "#ffffff")
+  pb <- pa / (plot_spacer() + pl + plot_spacer() + plot_layout(widths = c(0.35, 1, 0.35))) + plot_layout(heights = c(1, 0.27))   # legend under map b
+  g <- (pn | pb) + plot_annotation(tag_levels = list(c("a", "b", ""))) & theme(plot.tag = element_text(face = "bold", size = 14))
+  ggsave(file.path(fig, "Fig_access_bivariate.png"), g, width = 8.6, height = 5.9, dpi = 300, bg = "#ffffff")
   cat(sprintf("Access thirds: jobs within 30 min <= %.1f%% (low), <= %.1f%% (middle), above (high)\n", qa[1], qa[2]))
   print(LG[order(-i, j), .(deprivation = c("least", "middle", "most")[i], access = c("low", "middle", "high")[j], residents = round(res), share = round(share, 1))])
   cat("Saved Fig_access_bivariate.png\n")
