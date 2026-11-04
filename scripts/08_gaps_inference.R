@@ -1043,8 +1043,9 @@ section("74", "Offer and use: what the network offers and how riders use it", {
   }
 
   ## figure: (a) the raw gap split into offer and use; (b) use given the offer, three steps
-  P <- OUT[win == "weekday"]
-  P[, label := factor(label, levels = rev(K))]
+  KF <- c("ride_km", "dest_dep", "to_centre", "office")   # the four of the main text; all nine in supplementary Table S3
+  P <- OUT[win == "weekday" & msr %in% KF]
+  P[, label := factor(label, levels = rev(K[KF]))]
   pa <- P[analysis == "split" & step == "raw"][, part := factor(part, levels = c("observed", "offered", "use"),
                                                                   labels = c("Observed gap", "Offered by the network", "Use of the network"))]
   pb <- P[analysis == "given offer"][, step := factor(step, levels = c("raw", "position", "full"),
@@ -1074,8 +1075,8 @@ section("74", "Offer and use: what the network offers and how riders use it", {
     ms_water_top(L) + ms_outline(L) + ms_labels(L, c("Piątkowo", "Winogrady", "Jeżyce", "Łazarz", "Wilda", "Rataje", "Chartowo", "Główna"), size = 4.4) +
     ms_centre(L) + ms_scalebar(L, km = 4, text = 1.7) + ms_coord(L) + labs(title = "(c) Where use changes destinations") +
     theme_ms(13.5) + theme(plot.title = element_text(face = "bold", size = 13.5, hjust = 0), legend.key.width = unit(1.6, "cm"))
-  g <- (g1 | g2) / (plot_spacer() + g3 + plot_spacer() + plot_layout(widths = c(0.15, 1, 0.15))) + plot_layout(heights = c(1, 1.3))
-  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 9, height = 10.8, dpi = 280, bg = "white")
+  g <- (g1 | g2) / (plot_spacer() + g3 + plot_spacer() + plot_layout(widths = c(0.15, 1, 0.15))) + plot_layout(heights = c(0.55, 1.3))
+  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 9, height = 8.8, dpi = 280, bg = "white")
   cat("\nSaved offer_use.csv, offer_use_r2.csv, Fig_offer_use.png (a, b: slopes; c: map)\n")
 })
 
