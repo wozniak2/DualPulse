@@ -291,11 +291,12 @@ section("60", "Where the more and less deprived areas lie; the network panel of 
 
 ## ── 64 · Figure 8: the gaps and their parts ────────────────────────────────────────────────────────────────
 section("64", "Figure 8: the gaps and their parts", {
-  ## Figure replacing the 22-row table of the gaps (main text): for every measure, the raw slope on
+  ## Figure replacing the 22-row table of the gaps (main text): for the ten measures of the main text, the raw slope on
   ## deprivation (open circle), the parts of it accounted for by location, service at the stop, land use and
   ## population (stacked bars; Gelbach decomposition of script 56, primary specification), and the
-  ## remainder with its 95% CR2-Satterthwaite interval (black). The full table, with the medians of the least
-  ## and most deprived thirds, moves to the supplement.
+  ## remainder with its 95% CR2-Satterthwaite interval (black). The ten are the six same-trip indices, ride length,
+  ## destination deprivation, jobs within 30 minutes and night travel; the full table of all 22 measures, with the
+  ## medians of the least and most deprived thirds, is in the supplement (Table S7).
   ## Inputs: output/stage2/gap_decomposition.csv, gap_ladder.csv (script 56)
   ## Output: output/figures/Fig_decomposition.png
 
@@ -304,11 +305,10 @@ section("64", "Figure 8: the gaps and their parts", {
   s2 <- file.path(out_dir, "output/stage2"); fig <- file.path(out_dir, "output/figures")
   GB <- fread(file.path(s2, "gap_decomposition.csv")); RES <- fread(file.path(s2, "gap_ladder.csv"), encoding = "UTF-8")
   M <- unique(RES[step == "full", .(msr, dim, label, least, most, est, lo, hi, p)])
-  lev <- c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "ride_km", "dest_dep", "to_centre", "same_osiedle", "eff_dest", "dir_conc", "hub_share", "conn_100",
-           "jobs30", "transfers_jobs", "t_centre", "bridge", "irregularity", "dependence", "weather_rain", "night_vs_day")
+  lev <- c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "ride_km", "dest_dep", "jobs30", "night_vs_day")
   M <- M[match(lev, msr)]
   M[, label := sub("own osiedle", "own neighbourhood", label)]   # gap_ladder.csv written before the label change in section 56
-  wrap <- c("How much and when" = "How much\nand when", "Routes and transfers" = "Routes and\ntransfers", "Access by the timetable" = "Access by\nthe timetable")
+  wrap <- c("How much and when" = "How much\nand when", "Where to" = "Where\nto", "Access by the timetable" = "Access", "Responses" = "Night")
   M[dim %in% names(wrap), dim := wrap[dim]]
   M[, label := factor(label, levels = rev(label))][, dim := factor(dim, levels = unique(dim))]
   P <- merge(GB[part %in% c("location", "service", "landuse", "population")], M[, .(msr, label, dim)], by = "msr")
@@ -331,7 +331,7 @@ section("64", "Figure 8: the gaps and their parts", {
     theme(legend.position = "top", legend.location = "plot", legend.box = "vertical", plot.margin = margin(6, 14, 6, 6), panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
           strip.placement = "outside", strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 1), axis.title.x = element_text(hjust = 0.5, size = 12), axis.text.y = element_text(size = 12, colour = "#2b2b28"),
           panel.spacing.y = unit(0.5, "lines"), plot.background = element_rect(fill = "#ffffff", colour = NA))
-  ggsave(file.path(fig, "Fig_decomposition.png"), g, width = 8, height = 10.2, dpi = 280, bg = "#ffffff")
+  ggsave(file.path(fig, "Fig_decomposition.png"), g, width = 8, height = 6.2, dpi = 280, bg = "#ffffff")
   cat("Saved Fig_decomposition.png\n")
 })
 

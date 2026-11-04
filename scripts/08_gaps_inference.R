@@ -2,7 +2,7 @@
 ##
 ## Slopes of every measure on deprivation raw, net of position and net of land use and population, their
 ## decomposition and small-cluster inference, and the checks built on them (main text 3.2-3.5, supplementary
-## S4-S6, S8 and S9).
+## S4-S6 and S8-S10).
 ##
 ## Sections (named by the numbered scripts they replace, as in the project notes):
 ##   56      Gap ladder, decomposition and inference
@@ -29,6 +29,7 @@
 ##   86      Supplement tables: sharing, re-allocations and the periphery
 ##   87      Injected differences: what the same-trip indices could detect
 ##   88      Injected differences: what the destination estimator recovers
+##   89      Positive control: residents aged 61 and over
 ##
 ## Run from the repository root: Rscript run.R 8   (one section: Rscript run.R 8:73)
 
@@ -2319,4 +2320,48 @@ section("88", "Injected differences: what the destination estimator recovers", {
   cat("\nRide length added by the injection and recovered by the estimator:\n")
   print(RES[R > 1, .(label, k, R, mean_true = round(mean_true, 2), add_third_true = round(added_third_true, 3), add_third_est = round(added_third_est, 3), rec_third = round(recovered_third, 2),
                      add_full_true = round(added_full_true, 3), add_full_est = round(added_full_est, 3), rec_full = round(recovered_full, 2), add_full_est_sd = round(added_full_est_sd, 3), t_full = round(t_full, 2))])
+})
+
+## ── 89 · Positive control: residents aged 61 and over ─────────────────────────────────────────────────────
+section("89", "Positive control: residents aged 61 and over", {
+  ## Can the same models detect a pulse of people at all? The share of residents aged 61 and over is counted at the
+  ## address (registered residents geocoded to address points), so it varies between neighbouring catchments, and it
+  ## is a large group whose daily rhythm, without a commute, is known. Its coefficient in the primary full-step model
+  ## of section 56, where it is one of the population controls, is set against the slope on catchment deprivation,
+  ## which comes from 42 neighbourhood scores. Same stops, covariates and CR2-Satterthwaite inference by neighbourhood;
+  ## the share aged 0-18 is reported alongside.
+  ## Output: output/stage2/positive_control_age.csv (supplementary Table S10)
+  suppressPackageStartupMessages({library(data.table); library(splines)})
+  s2 <- file.path(ROOT, "output/stage2")
+  source(file.path(REPO, "R/cr_inference.R"))
+  X <- as.data.table(readRDS(file.path(s2, "gap_stops.rds")))
+  zs <- function(v) (v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE)
+  LOC  <- c("ns(dist_km, 3)", "sec_s1", "sec_c1", "sec_s2", "sec_c2")
+  SERV <- c("l_lines", "l_dep", "tram_share", "direct_centre")
+  LUSE <- c("b1", "b2", "b3", "b4", "landuse_mix", "fsi", "wc_tree")
+  POPV <- c("share_0_18", "share_61plus", "lres", "larea")
+  SAME <- c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer")   # position is location alone for these (section 56)
+  MSR <- c(SAME, "ride_km", "dest_dep", "to_centre", "same_osiedle", "eff_dest", "dir_conc", "hub_share", "conn_100",
+           "jobs30", "transfers_jobs", "t_centre", "bridge", "irregularity", "dependence", "weather_rain", "night_vs_day")
+  cat(sprintf("Residents aged 61+: mean %.1f%%, SD %.1f pp over the %d compared catchments; %d distinct values, against %d for catchment deprivation; correlation with deprivation %.2f\n",
+              100 * mean(X$share_61plus), 100 * sd(X$share_61plus), nrow(X), uniqueN(X$share_61plus), uniqueN(X$dep), cor(X$share_61plus, X$dep)))
+  R <- rbindlist(lapply(MSR, function(y) {
+    Z <- X[is.finite(get(y))]
+    Z[, `:=`(yy = zs(get(y)), dz = zs(dep))]
+    for (v in c(SERV, LUSE, POPV)) Z[, (v) := zs(get(v))]
+    f <- lm(reformulate(c("dz", LOC, if (!y %in% SAME) SERV, LUSE, POPV), "yy"), Z)
+    rbindlist(lapply(c("share_61plus", "share_0_18", "dz"), function(k) { ci <- crinf(f, Z$osiedle, k)
+      data.table(msr = y, term = k, n = nrow(Z), est = ci$b, se = ci$se2, df = ci$df, p = 2 * pt(-abs(ci$b / ci$se2), ci$df)) }))
+  }))
+  R[msr %in% SAME, q_same := p.adjust(p, "BH"), by = term]   # within the six same-trip indices, the family of the stated expectations
+  R[, q_all := p.adjust(p, "BH"), by = term]                   # across all 22 measures
+  fwrite(R, file.path(s2, "positive_control_age.csv"))
+  W <- dcast(R[msr %in% SAME], msr ~ term, value.var = c("est", "p", "q_same"))
+  W <- W[match(SAME, msr)]
+  cat("Same-trip indices, full step: slope on the share aged 61+, on the share aged 0-18 and on deprivation (SD per SD), CR2-Satterthwaite p, BH q within the six\n")
+  print(W[, lapply(.SD, function(v) if (is.numeric(v)) round(v, 3) else v)], row.names = FALSE)
+  L <- fread(file.path(s2, "gap_ladder.csv"))[step == "full", .(msr, est_56 = est)]
+  cat(sprintf("Check: largest difference between these deprivation slopes and the full-step remainders of section 56: %.1e\n",
+              merge(R[term == "dz", .(msr, est)], L, by = "msr")[, max(abs(est - est_56))]))
+  cat("Saved positive_control_age.csv\n")
 })
