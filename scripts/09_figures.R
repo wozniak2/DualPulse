@@ -500,7 +500,7 @@ section("69", "Figure 3: what the network offers", {
 section("72", "Graphical abstract", {
   ## Graphical abstract (Journal of Transport Geography: at least 1328 x 531 px, w x h, readable at 13 x 5 cm), in
   ## the order of the paper: (1) the offer: the most and least deprived catchments on the radial network and their
-  ## access to jobs; (2) the shape of the offer: the two streams of riders (Figure 6a); (3) places, not people: the
+  ## access to jobs; (2) the shape of the offer: two streams of riders, mostly by geography (Figure 6a); (3) places, not people: the
   ## gaps raw and net of position on the network (gap ladder of section 56).
   ## Inputs: stop_complexes.gpkg, gap_thirds_stops.csv, route_segments.csv, segregation_network_corridors.csv (79), gap_ladder.csv (56)
   ## Output: output/figures/Graphical_abstract.png
@@ -537,11 +537,11 @@ section("72", "Graphical abstract", {
                            labels = c("least deprived", "most deprived"), name = "Ridden mainly by riders from the") +
     scale_linewidth(range = c(0.2, 3), limits = c(0.0008, mx), guide = "none") + ms_centre(L) +
     ms_coord(L) +
-    labs(title = "Two streams cross at the centre") + theme_ms(base) + tt +
+    labs(title = "Two streams, mostly by geography") + theme_ms(base) + tt +
     theme(legend.position = "bottom", legend.title = element_text(size = base - 1), legend.text = element_text(size = base - 1, colour = MSTY$ink),
           legend.key.width = unit(1.6, "cm"), legend.key.height = unit(0.3, "cm"))
   ## (3) places, not people
-  K <- c(jobs30 = "Jobs within 30 min", t_centre = "Time to the centre", ride_km = "Ride length", conn_100 = "Connections per ride", tidal = "Tidal index")
+  K <- c(jobs30 = "Jobs within 30 min", t_centre = "Time to the centre", ride_km = "Ride length", tidal = "Tidal index")   # measures of the main text
   G <- R[msr %in% names(K) & step %in% c("raw", "position")][, `:=`(lab = factor(K[msr], levels = rev(K)),
         step = factor(step, levels = c("raw", "position"), labels = c("Raw gap", "Net of position on the network")))]
   p3 <- ggplot(G, aes(est, lab, fill = step)) + geom_vline(xintercept = 0, colour = "#9a9893") +
