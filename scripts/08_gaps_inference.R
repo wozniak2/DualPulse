@@ -1069,8 +1069,11 @@ section("74", "Offer and use: what the network offers and how riders use it", {
     ms_water_top(L) + ms_outline(L) + ms_labels(L, c("Piątkowo", "Winogrady", "Jeżyce", "Łazarz", "Wilda", "Rataje", "Chartowo", "Główna"), size = 4.4) +
     ms_centre(L) + ms_scalebar(L, km = 4, text = 1.7) + ms_coord(L) + labs(title = "(b) Where use changes destinations") +
     theme_ms(13.5) + theme(plot.title = element_text(face = "bold", size = 13.5, hjust = 0), legend.key.width = unit(1.6, "cm"))
-  g <- wrap_elements(full = g1) / wrap_elements(full = g3) + plot_layout(heights = c(0.5, 1.3))   # unaligned: the map keeps the full width
-  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 9, height = 8.2, dpi = 280, bg = "white")
+  ## side by side, titles aligned at the top; the map unaligned so it keeps its own panel
+  left <- wrap_elements(full = g1 + theme(legend.position = "bottom")) / plot_spacer() + plot_layout(heights = c(1, 0.1))
+  g <- wrap_elements(full = left) | wrap_elements(full = g3)
+  g <- g + plot_layout(widths = c(1.05, 1))
+  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 12, height = 6.2, dpi = 280, bg = "white")
   cat("\nSaved offer_use.csv, offer_use_r2.csv, Fig_offer_use.png (a: slopes; b: map)\n")
 })
 
