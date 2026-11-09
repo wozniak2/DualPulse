@@ -974,8 +974,8 @@ section("74", "Offer and use: what the network offers and how riders use it", {
   ## (b) Use given the offer: the observed measure on deprivation with the offer held fixed (regression
   ##     adjustment), alone, with position and with position, land use and population.
   ## (c) How much of the variation between origins the offer and location capture (R2, deprivation left out).
-  ## Figure 5 of the main text: (a) the split and (b) use given the offer, weekdays, and a map of the deprivation
-  ## of destinations reached minus offered, by origin catchment.
+  ## Figure 4 of the main text: (a) the split, weekdays, and (b) a map of the deprivation of destinations reached
+  ## minus offered, by origin catchment. Use given the offer is computed for supplementary Table S3 only.
   ## CR2 standard errors by osiedle with Satterthwaite df; Benjamini-Hochberg q across the nine measures within
   ## each window, part and step. Windows: Monday-Thursday as a whole (main) and its morning peak, when most
   ## boardings start from home (check).
@@ -1042,15 +1042,13 @@ section("74", "Offer and use: what the network offers and how riders use it", {
     cat("R2 of the offer and of location:\n"); print(R2[win == w, .(msr, n, offer = round(offer, 2), location = round(location, 2), position = round(position, 2), offer_location = round(offer_location, 2))])
   }
 
-  ## figure: (a) the raw gap split into offer and use; (b) use given the offer, three steps
+  ## figure: (a) the raw gap split into offer and use; (b) map
   KF <- c("ride_km", "dest_dep", "to_centre", "office")   # the four of the main text; all nine in supplementary Table S3
   P <- OUT[win == "weekday" & msr %in% KF]
   P[, label := factor(label, levels = rev(K[KF]))]
   pa <- P[analysis == "split" & step == "raw"][, part := factor(part, levels = c("observed", "offered", "use"),
                                                                   labels = c("Observed gap", "Offered by the network", "Use of the network"))]
-  pb <- P[analysis == "given offer"][, step := factor(step, levels = c("raw", "position", "full"),
-                                                        labels = c("Offer held fixed", "+ position", "+ land use and population"))]
-  th <- theme_minimal(base_size = 13.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), legend.position = "bottom", legend.direction = "vertical",
+  th <- theme_minimal(base_size = 13.5) + theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(), legend.position = "right", legend.direction = "vertical",
                                               plot.title = element_text(face = "bold", size = 13.5), legend.title = element_blank(), axis.text.y = element_text(size = 13.5, colour = "#2b2b28"),
                                               axis.text.x = element_text(size = 12.5), legend.text = element_text(size = 13))
   dodge <- position_dodge(width = 0.65)
@@ -1058,11 +1056,7 @@ section("74", "Offer and use: what the network offers and how riders use it", {
     geom_linerange(aes(xmin = lo, xmax = hi), position = dodge, linewidth = 0.9) + geom_point(position = dodge, size = 2.8) +
     scale_colour_manual(values = c("#2b2b28", "#8f8d86", "#eb6834")) + labs(title = "(a) Offered + use = observed", x = "Slope (SD per SD)", y = NULL) + th +
     scale_x_continuous(breaks = seq(-0.4, 0.8, 0.4)) + theme(plot.margin = margin(5, 22, 5, 5))
-  g2 <- ggplot(pb, aes(est, label, colour = step)) + geom_vline(xintercept = 0, colour = "#9a9893") +
-    geom_linerange(aes(xmin = lo, xmax = hi), position = dodge, linewidth = 0.9) + geom_point(position = dodge, size = 2.8) +
-    scale_colour_manual(values = c("#eb6834", "#2a78d6", "#6b6a64")) + labs(title = "(b) Use, offer held fixed", x = "Slope (SD per SD)", y = NULL) + th +
-    theme(axis.text.y = element_blank())
-  ## (c) map: where riders reach more or less deprived places than their lines offer, weekdays
+  ## (b) map: where riders reach more or less deprived places than their lines offer, weekdays
   suppressPackageStartupMessages({library(sf); library(patchwork)})
   source(file.path(REPO, "R/map_style.R")); L <- ms_layers(out_dir)
   CP <- st_read(file.path(s2, "stop_complexes.gpkg"), "exclusive_400m_network", quiet = TRUE)
@@ -1073,11 +1067,11 @@ section("74", "Offer and use: what the network offers and how riders use it", {
     scale_fill_gradient2(low = "#2f8f83", mid = "#f0efec", high = "#a3527d", midpoint = 0, limits = c(-dl, dl),
                          name = "Destinations reached minus offered\n(deprivation, z)") +
     ms_water_top(L) + ms_outline(L) + ms_labels(L, c("Piątkowo", "Winogrady", "Jeżyce", "Łazarz", "Wilda", "Rataje", "Chartowo", "Główna"), size = 4.4) +
-    ms_centre(L) + ms_scalebar(L, km = 4, text = 1.7) + ms_coord(L) + labs(title = "(c) Where use changes destinations") +
+    ms_centre(L) + ms_scalebar(L, km = 4, text = 1.7) + ms_coord(L) + labs(title = "(b) Where use changes destinations") +
     theme_ms(13.5) + theme(plot.title = element_text(face = "bold", size = 13.5, hjust = 0), legend.key.width = unit(1.6, "cm"))
-  g <- (g1 | g2) / (plot_spacer() + g3 + plot_spacer() + plot_layout(widths = c(0.15, 1, 0.15))) + plot_layout(heights = c(0.55, 1.3))
-  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 9, height = 8.8, dpi = 280, bg = "white")
-  cat("\nSaved offer_use.csv, offer_use_r2.csv, Fig_offer_use.png (a, b: slopes; c: map)\n")
+  g <- wrap_elements(full = g1) / wrap_elements(full = g3) + plot_layout(heights = c(0.5, 1.3))   # unaligned: the map keeps the full width
+  ggsave(file.path(fig, "Fig_offer_use.png"), g, width = 9, height = 8.2, dpi = 280, bg = "white")
+  cat("\nSaved offer_use.csv, offer_use_r2.csv, Fig_offer_use.png (a: slopes; b: map)\n")
 })
 
 ## ── 75 · Peripheral deprivation: what the network offers deprived areas far from the centre ─────────────────
