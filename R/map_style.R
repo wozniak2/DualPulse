@@ -32,10 +32,10 @@ ms_base <- function(L, borders = TRUE) list(
 ms_water_top <- function(L) geom_sf(data = L$water, fill = MSTY$water, colour = NA, alpha = 0.9, inherit.aes = FALSE)
 ms_outline <- function(L) geom_sf(data = L$city, fill = NA, colour = "#b9b7b0", linewidth = 0.35, inherit.aes = FALSE)
 ## district names with a white halo; `which` selects labels by display name
-ms_labels <- function(L, which = NULL, size = 2.5) {
+ms_labels <- function(L, which = NULL, size = 2.5, force = 0.3, box.padding = 0.05) {
   d <- if (is.null(which)) L$labels else L$labels[label %in% which]
   ggrepel::geom_text_repel(data = d, aes(X, Y, label = label), size = size, colour = MSTY$ink, fontface = "italic", bg.colour = "#ffffff", bg.r = 0.15,
-                           min.segment.length = Inf, force = 0.3, seed = 7, box.padding = 0.05, inherit.aes = FALSE)
+                           min.segment.length = Inf, force = force, seed = 7, box.padding = box.padding, inherit.aes = FALSE)
 }
 ms_centre <- function(L) geom_point(data = L$centre, aes(X, Y), shape = 3, size = 2.2, stroke = 0.7, colour = MSTY$ink, inherit.aes = FALSE)
 ## 2-km scale bar (0-1-2 km, alternating) in the bottom-left corner; `text` scales the labels

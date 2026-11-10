@@ -459,7 +459,7 @@ section("69", "Figure 3: what the network offers", {
   P <- merge(CP[, "stop_name"], D[, .(stop_name, col)], by = "stop_name")
 
   pm <- ggplot() + ms_base(L) + geom_sf(data = P, aes(fill = col), colour = NA) + scale_fill_identity() + ms_water_top(L) + ms_outline(L) +
-    ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Główna", "Krzesiny", "Głuszyna"), size = 3.3) +
+    ms_labels(L, c("Stare Miasto", "Jeżyce", "Łazarz", "Wilda", "Piątkowo", "Winogrady", "Rataje", "Główna", "Krzesiny", "Głuszyna"), size = 3.3, force = 2, box.padding = 0.3) +
     ms_centre(L) + ms_coord(L) + theme_ms(13) + labs(title = "Deprivation and access to jobs")
   ## legend: 3 x 3 tiles with the share of residents in each cell
   LG <- merge(BV, D[, .(res = sum(residents)), by = .(i, j)], by = c("i", "j"), all.x = TRUE)[is.na(res), res := 0][, share := 100 * res / sum(res)]

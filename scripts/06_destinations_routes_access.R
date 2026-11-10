@@ -1277,7 +1277,7 @@ section("54", "Access by the timetable", {
   ## cost per boarding) and the minimum number of boardings on any path.
   ## Windows: Tuesday-Thursday 05-06 (early), 07-09 (morning peak), 20-22
   ## (evening); Sunday 10-14.
-  ## Per origin: city jobs reachable within 30 and 45 min (workplace grid jobs in
+  ## Per origin: city jobs reachable within 30, 45 and 60 min (workplace grid jobs in
   ## the destination catchments), job-weighted mean travel time and transfers,
   ## share of jobs reachable without a transfer, and time and transfers to the
   ## centre (complexes within 1 km of Stary Rynek), the nearest hospital,
@@ -1376,7 +1376,7 @@ section("54", "Access by the timetable", {
       t <- T[i, ]; bf <- pmax(Bf[i, ] - 1, 0); bm <- pmax(Bmin[i, ] - 1, 0); ok <- is.finite(t)
       pt <- function(set) { k <- dset %in% set & ok; if (any(k)) { j <- which(k)[which.min(t[k])]; c(t[j], bf[j]) } else c(NA, NA) }
       ce <- pt(POI$centre); ho <- pt(POI$hospital); un <- pt(POI$university); ma <- pt(POI$mall)
-      data.table(stop_name = o[i], jobs30 = sum(jw[ok & t <= 30]) / JT, jobs45 = sum(jw[ok & t <= 45]) / JT,
+      data.table(stop_name = o[i], jobs30 = sum(jw[ok & t <= 30]) / JT, jobs45 = sum(jw[ok & t <= 45]) / JT, jobs60 = sum(jw[ok & t <= 60]) / JT,
                  time_jobs = sum(jw[ok] * t[ok]) / sum(jw[ok]), transfers_jobs = sum(jw[ok] * bf[ok]) / sum(jw[ok]),
                  direct_jobs = sum(jw[ok & bm == 0]) / JT, reached = mean(ok),
                  t_centre = ce[1], x_centre = ce[2], t_hospital = ho[1], x_hospital = ho[2], t_univ = un[1], x_univ = un[2], t_mall = ma[1], x_mall = ma[2])
@@ -1398,7 +1398,7 @@ section("54", "Access by the timetable", {
       u <- t(Xg) %*% (Am %*% e[i]); meat <- meat + u %*% t(u) }
     setNames(sqrt(diag(B %*% meat %*% B)), colnames(X))
   }
-  MS <- c(jobs30 = "Jobs within 30 min (share of city)", jobs45 = "Jobs within 45 min (share of city)", time_jobs = "Mean travel time to jobs (min)",
+  MS <- c(jobs30 = "Jobs within 30 min (share of city)", jobs45 = "Jobs within 45 min (share of city)", jobs60 = "Jobs within 60 min (share of city)", time_jobs = "Mean travel time to jobs (min)",
           transfers_jobs = "Mean transfers to jobs (fastest path)", direct_jobs = "Jobs reachable without a transfer (share of city)",
           t_centre = "Time to the centre (min)", x_centre = "Transfers to the centre", t_hospital = "Time to the nearest hospital (min)",
           t_univ = "Time to the nearest university building (min)", t_mall = "Time to the nearest shopping centre (min)")

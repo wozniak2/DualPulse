@@ -30,6 +30,8 @@
 ##   87      Injected differences: what the same-trip indices could detect
 ##   88      Injected differences: what the destination estimator recovers
 ##   89      Positive control: residents aged 61 and over
+##   90      Checks: the offer weighted by capacity, and flagged complexes included
+##   91      Check: access at 30, 45 and 60 minutes
 ##
 ## Run from the repository root: Rscript run.R 8   (one section: Rscript run.R 8:73)
 
@@ -2363,4 +2365,165 @@ section("89", "Positive control: residents aged 61 and over", {
   cat(sprintf("Check: largest difference between these deprivation slopes and the full-step remainders of section 56: %.1e\n",
               merge(R[term == "dz", .(msr, est)], L, by = "msr")[, max(abs(est - est_56))]))
   cat("Saved positive_control_age.csv\n")
+})
+
+## ── 90 · Checks: the offer weighted by capacity, and flagged complexes included ─────────────────────────────
+section("90", "Checks: the offer weighted by capacity, and flagged complexes included", {
+  ## Two checks of the offer-and-use results (supplementary S4 and S8), Monday-Thursday all day.
+  ## (1) Capacity. The offer of sections 46 and 74 spreads an origin's boardings over the lines and directions at
+  ##     the stop in proportion to departures, although a tram carries more riders than a bus. Here each tram
+  ##     departure counts as two or as three bus departures (a nominal ratio by mode, not vehicle sizes).
+  ## (2) Flagged complexes. The comparisons leave out terminals, interchanges and complexes near the city limit
+  ##     (section 21). Here they are added back in three steps: interchanges; terminals too; all with residents.
+  ##     Covariates as in section 56, built for every complex with residents; slopes as in section 74 for ride
+  ##     length, the deprivation of destinations, the share carried to the centre and office floor at
+  ##     destinations; and the remainders of the six same-trip indices (position = location) and of night
+  ##     relative to day volume (position = location and service).
+  ## The main sample with the offer by departures reproduces offer_use.csv (section 74) to within 0.001 for ride
+  ## length, the deprivation of destinations and the share carried to the centre, and to within 0.013 for office
+  ## floor (difference not traced); the remainders of volume match gap_ladder.csv (section 56). CR2 standard errors by osiedle with Satterthwaite df; no correction for
+  ## multiple tests. Sharing of the network and access are not re-estimated.
+  ## Inputs: catchment_covariates_network.csv, catchment_tissue_descriptors_exclusive_400m_network.csv,
+  ##         stage2_line_stop_cells.rds, od/, stop_complex_attributes.csv, stage2_stop_indices.csv,
+  ##         behaviour_stop_measures.csv.
+  ## Outputs: output/stage2/check_offer_capacity_flagged.csv, check_same_trip_flagged.csv
+
+  suppressPackageStartupMessages({library(data.table); library(splines)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/od_expand.R")); source(file.path(REPO, "R/cr_inference.R"))
+  s2 <- file.path(out_dir, "output/stage2"); MON <- c(3:6, 10)
+  zs <- function(v) (v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE)
+
+  ## ── covariates for every complex with residents (section 56, without the flag filter) ──
+  cv <- fread(file.path(s2, "catchment_covariates_network.csv"), encoding = "UTF-8")
+  tdf <- fread(file.path(s2, "catchment_tissue_descriptors_exclusive_400m_network.csv"), encoding = "UTF-8")
+  td <- tdf[, .(stop_name, b1 = ilr_res_vs_nonres, b2 = ilr_multi_vs_single, b3 = ilr_serv_vs_prod, b4 = ilr_retail_vs_work,
+                landuse_mix, fsi = log(fsi + 0.01), wc_tree)]
+  d <- merge(cv[residents > 0, .(stop_name, dep, dist_km, osiedle, share_0_18, share_61plus, lres = log1p(as.numeric(residents)),
+                                 larea = log(catchment_area_m2), flagged, terminal, interchange, boundary)], td, by = "stop_name")
+  cells <- readRDS(file.path(s2, "stage2_line_stop_cells.rds"))[daytype == "monthu" & month %in% MON]
+  LMODE <- cells[, .N, by = .(NR_LINI, mode)][order(-N)][, .SD[1], by = NR_LINI][, .(NR_LINI, mode)]
+  sv <- cells[night == FALSE, .(l_lines = log(uniqueN(NR_LINI)), l_dep = log(sum(departures)),
+                                tram_share = sum(departures[mode == "tram"]) / sum(departures)), by = .(stop_name)]
+  segdep <- cells[night == FALSE, .(dep = sum(departures)), by = .(o = stop_name, NR_LINI, dir)]
+  depP <- cells[, .(dep = sum(departures)), by = .(o = stop_name, NR_LINI, dir, period = as.character(period))]
+  rm(cells); gc()
+  od <- rbindlist(lapply(sprintf("%02d", MON), function(m) expand_od(readRDS(file.path(s2, "od", sprintf("od_2025_%s.rds", m))))[
+    daytype == "monthu" & o != "outside", .(flow = sum(flow), fkm = sum(fkm), flow_c = sum(flow_c)), by = .(o, d, NR_LINI, dir, period)]))
+  od <- od[, .(flow = sum(flow), fkm = sum(fkm), flow_c = sum(flow_c)), by = .(o, d, NR_LINI, dir, period)]
+  odc <- merge(od, cv[, .(d = stop_name, centre_km = dist_km)], by = "d", all.x = TRUE)
+  reach <- merge(odc[, .(reach = any(centre_km <= 1.5, na.rm = TRUE)), by = .(o, NR_LINI, dir)], segdep, by = c("o", "NR_LINI", "dir"))[
+    , .(direct_centre = sum(dep * reach) / sum(dep)), by = .(stop_name = o)]
+  d <- merge(merge(d, sv, by = "stop_name"), reach, by = "stop_name")
+  xy <- fread(file.path(s2, "stop_complex_attributes.csv"), encoding = "UTF-8")[, .(stop_name, x, y)]
+  ctr <- sf::st_coordinates(sf::st_transform(sf::st_sfc(sf::st_point(c(16.9335, 52.4083)), crs = 4326), 2180))
+  xy[, th := atan2(y - ctr[2], x - ctr[1])][, `:=`(sec_s1 = sin(th), sec_c1 = cos(th), sec_s2 = sin(2 * th), sec_c2 = cos(2 * th))]
+  d <- merge(d, xy[, .(stop_name, sec_s1, sec_c1, sec_s2, sec_c2)], by = "stop_name")
+  for (k in c("terminal", "interchange", "boundary", "flagged")) d[is.na(get(k)), (k) := FALSE]
+  d <- d[complete.cases(d)]
+  cat(sprintf("Complexes with residents and complete covariates: %d (not flagged %d)\n", nrow(d), d[flagged == FALSE, .N]))
+
+  ## ── origin profiles: observed, offer by departures, offer by capacity (section 46) ──
+  D <- merge(cv[, .(d = stop_name, centre_km = dist_km, dest_dep = dep)], tdf[, .(d = stop_name, office = share_office)], by = "d")
+  f <- merge(od, D, by = "d", all.x = TRUE)
+  f[, outside := d == "outside"]
+  f[, `:=`(ride_km = fkm / flow, to_centre = fifelse(outside, NA_real_, as.numeric(centre_km <= 1.5)))]
+  MS <- c("ride_km", "dest_dep", "to_centre", "office")
+  seg <- f[, c(list(B = sum(flow), Bc = sum(flow_c)), lapply(.SD, function(v) { ok <- !is.na(v); if (any(ok)) sum(v[ok] * flow[ok]) / sum(flow[ok]) else NA_real_ })),
+           by = .(o, NR_LINI, dir, period), .SDcols = MS]
+  seg <- merge(seg, depP, by = c("o", "NR_LINI", "dir", "period"), all.x = TRUE)[!is.na(dep) & dep > 0]
+  seg <- merge(seg, LMODE, by = "NR_LINI", all.x = TRUE)
+  seg[, `:=`(cap2 = dep * fifelse(mode %in% "tram", 2, 1), cap3 = dep * fifelse(mode %in% "tram", 3, 1))]
+  wm <- function(v, w) { ok <- !is.na(v); if (any(ok)) sum(v[ok] * w[ok]) / sum(w[ok]) else NA_real_ }
+  prof <- function(wcol, nm) seg[, c(list(boardings = sum(Bc)), lapply(.SD, wm, w = get(wcol))), by = .(stop_name = o), .SDcols = MS][, comp := nm]
+  PR <- rbind(prof("B", "observed"), prof("dep", "departures"), prof("cap2", "capacity 2:1"), prof("cap3", "capacity 3:1"))
+  PR <- PR[boardings >= 2000]
+
+  ## ── slopes (section 74) ──
+  LOC <- c("ns(dist_km, 3)", "sec_s1", "sec_c1", "sec_s2", "sec_c2"); SERV <- c("l_lines", "l_dep", "tram_share", "direct_centre")
+  LUSE <- c("b1", "b2", "b3", "b4", "landuse_mix", "fsi", "wc_tree"); POPV <- c("share_0_18", "share_61plus", "lres", "larea")
+  STEPS <- list(raw = character(0), position = c(LOC, SERV), full = c(LOC, SERV, LUSE, POPV))
+  slope <- function(Z, y, ctrl) { fit <- lm(reformulate(c("dz", ctrl), y), Z); ci <- crinf(fit, Z$osiedle, "dz")
+    data.table(est = ci$b, se = ci$se2, df = ci$df, p = 2 * pt(-abs(ci$b / ci$se2), ci$df), n = nobs(fit)) }
+  SAMPLES <- list("main (not flagged)" = quote(flagged == FALSE),
+                  "+ interchanges" = quote(flagged == FALSE | (interchange & !boundary & !terminal)),
+                  "+ interchanges, terminals" = quote(flagged == FALSE | !boundary),
+                  "all with residents" = quote(TRUE))
+  run <- function(samp, offer, m) {
+    S <- d[eval(SAMPLES[[samp]])]
+    W <- dcast(PR[comp %in% c("observed", offer)], stop_name ~ comp, value.var = m); setnames(W, offer, "network")
+    Z <- merge(S, W[!is.na(observed) & !is.na(network)], by = "stop_name")
+    for (v in c(SERV, LUSE, POPV)) Z[, (v) := zs(get(v))]
+    so <- sd(Z$observed); Z[, `:=`(dz = zs(dep), y_obs = observed / so, y_net = network / so, y_use = (observed - network) / so)]
+    rbindlist(lapply(names(STEPS), function(st) rbindlist(lapply(c(observed = "y_obs", offered = "y_net", use = "y_use"), function(y)
+      slope(Z, y, STEPS[[st]])), idcol = "part")[, step := st]))[, `:=`(sample = samp, offer = offer, msr = m)]
+  }
+  R1 <- rbindlist(lapply(c("departures", "capacity 2:1", "capacity 3:1"), function(o) rbindlist(lapply(MS, function(m) run("main (not flagged)", o, m)))))
+  R3 <- rbindlist(lapply(names(SAMPLES)[-1], function(s) rbindlist(lapply(MS, function(m) run(s, "departures", m)))))
+  OUT <- rbind(R1, R3)
+  fwrite(OUT, file.path(s2, vtag("check_offer_capacity_flagged.csv")))
+  OUT[, sample := factor(sample, names(SAMPLES))]
+  cat("\n== Deprivation of destinations: slopes by sample and offer weighting\n")
+  print(dcast(OUT[msr == "dest_dep"], sample + offer + n + step ~ part, value.var = "est")[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 2) else x)])
+  cat("\n== Use part of the other measures (raw / position / full)\n")
+  print(dcast(OUT[msr != "dest_dep" & part == "use"], msr + sample + offer ~ step, value.var = "est")[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 2) else x)])
+  if (Sys.getenv("OD_VARIANT", "tsy") == "tsy") {
+    OU <- fread(file.path(s2, "offer_use.csv"))[win == "weekday" & analysis == "split", .(msr, part, step, est_74 = est)]
+    cat(sprintf("\nCheck: largest difference from section 74 (main sample, offer by departures): %.1e\n",
+                merge(R1[offer == "departures"], OU, by = c("msr", "part", "step"))[, max(abs(est - est_74))]))
+  }
+
+  ## ── same-trip indices and night travel with the flagged complexes ──
+  I <- fread(file.path(s2, "stage2_stop_indices.csv"), encoding = "UTF-8")[, .(stop_name, volume, tidal, onset_b, conc_b, sat_b, summer)]
+  BH <- dcast(fread(file.path(s2, "behaviour_stop_measures.csv"), encoding = "UTF-8")[measure %in% c("night_vs_day")], stop_name ~ measure, value.var = "value")
+  V <- rbindlist(lapply(names(SAMPLES), function(s) { Z <- merge(merge(d[eval(SAMPLES[[s]])], I, by = "stop_name"), BH, by = "stop_name", all.x = TRUE)
+    for (v in c(SERV, LUSE, POPV)) Z[, (v) := zs(get(v))]
+    Z[, dz := zs(dep)]
+    rbindlist(lapply(c("volume", "tidal", "onset_b", "conc_b", "sat_b", "summer", "night_vs_day"), function(m) { Zm <- Z[!is.na(get(m))]; Zm[, y := zs(get(m))]
+      ctrl <- if (m == "night_vs_day") c(LOC, SERV, LUSE, POPV) else c(LOC, LUSE, POPV)
+      cbind(sample = s, msr = m, slope(Zm, "y", ctrl)) })) }))
+  fwrite(V, file.path(s2, "check_same_trip_flagged.csv"))
+  V[, sample := factor(sample, names(SAMPLES))]
+  cat("\n== Remainders of the same-trip indices and night travel, by sample (estimate, then p)\n")
+  print(dcast(V, msr ~ sample, value.var = "est")[, lapply(.SD, function(x) if (is.numeric(x)) round(x, 2) else x)])
+  print(dcast(V, msr ~ sample, value.var = "p")[, lapply(.SD, function(x) if (is.numeric(x)) signif(x, 2) else x)])
+  cat("\nSaved check_offer_capacity_flagged.csv, check_same_trip_flagged.csv\n")
+})
+
+## ── 91 · Check: access at 30, 45 and 60 minutes ─────────────────────────────────────────────────────────────
+section("91", "Check: access at 30, 45 and 60 minutes", {
+  ## Does the access advantage of deprived areas depend on the 30-minute threshold? The share of the city's jobs
+  ## within 30, 45 and 60 minutes by the morning-peak timetable (section 54), on the stops of section 56:
+  ## medians of the least and most deprived thirds; slope on catchment deprivation raw and net of position
+  ## (location and service; CR2 by osiedle with Satterthwaite df); Erreygers concentration index over residents
+  ## ranked from the most deprived catchment, raw and conditional on position (as in section 65).
+  ## Inputs: gap_stops.rds (56), access_origin.csv (54). Output: output/stage2/check_access_thresholds.csv
+
+  suppressPackageStartupMessages({library(data.table); library(splines)})
+  out_dir <- ROOT
+  source(file.path(REPO, "R/cr_inference.R"))
+  s2 <- file.path(out_dir, "output/stage2")
+  X <- readRDS(file.path(s2, "gap_stops.rds"))
+  AC <- fread(file.path(s2, "access_origin.csv"), encoding = "UTF-8")[window == "Weekday 07-09 (morning peak)", .(stop_name, j30 = 100 * jobs30, j45 = 100 * jobs45, j60 = 100 * jobs60)]
+  X <- merge(X, AC, by = "stop_name"); X[, residents := round(expm1(lres))]
+  cat(sprintf("Check: largest difference between jobs30 here and in gap_stops.rds: %.1e\n", X[, max(abs(j30 - jobs30), na.rm = TRUE)]))
+  NETV <- c("ns(dist_km, 3)", "sec_s1", "sec_c1", "sec_s2", "sec_c2", "l_lines", "l_dep", "tram_share", "direct_centre")
+  zs <- function(v) (v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE)
+  wcov <- function(a, b, w) sum(w * (a - sum(w * a) / sum(w)) * (b - sum(w * b) / sum(w))) / sum(w)
+  frank_w <- function(dep, w) { o <- order(-dep); cw <- cumsum(w[o]) / sum(w); r <- numeric(length(w)); r[o] <- cw - w[o] / sum(w) / 2; r }
+  cindex <- function(y, r, w) 2 * wcov(y, r, w) / (sum(w * y) / sum(w))
+  OUT <- rbindlist(lapply(c(j30 = 30, j45 = 45, j60 = 60), function(m) { v <- paste0("j", m)
+    Z <- X[is.finite(get(v)) & residents > 0]; Z[, `:=`(y = zs(get(v)), dz = zs(dep))]
+    for (k in c("l_lines", "l_dep", "tram_share", "direct_centre")) Z[, (k) := zs(get(k))]
+    sl <- function(ctrl) { f <- lm(reformulate(c("dz", ctrl), "y"), Z); ci <- crinf(f, Z$osiedle, "dz"); c(ci$b, 2 * pt(-abs(ci$b / ci$se2), ci$df)) }
+    r0 <- sl(character(0)); r1 <- sl(NETV)
+    w <- Z$residents; r <- frank_w(Z$dep, w); yv <- Z[[v]]; k <- 4 * (sum(w * yv) / sum(w)) / 100
+    f <- lm(reformulate(c("dep", NETV), v), Z, weights = residents); Z0 <- copy(Z)[, dep := sum(w * dep) / sum(w)]
+    data.table(minutes = m, n = nrow(Z), least = Z[third == "least", median(get(v))], most = Z[third == "most", median(get(v))],
+               mean_residents = sum(w * yv) / sum(w), slope_raw = r0[1], p_raw = r0[2], slope_position = r1[1], p_position = r1[2],
+               ci = k * cindex(yv, r, w), ci_conditional = k * (cindex(yv, r, w) - cindex(predict(f, Z0), r, w)))
+  }))
+  fwrite(OUT, file.path(s2, "check_access_thresholds.csv"))
+  print(OUT[, lapply(.SD, function(x) if (is.numeric(x)) signif(x, 3) else x)])
+  cat("Saved check_access_thresholds.csv\n")
 })
